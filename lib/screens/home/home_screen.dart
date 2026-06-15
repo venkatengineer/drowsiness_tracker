@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../widgets/floating_navbar.dart';
-import 'history_screen.dart';
 import 'start_driving_screen.dart';
+import 'trip_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,7 +14,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  static const _pages = [StartDrivingScreen(), HistoryScreen()];
+  static const _pages = [StartDrivingScreen(), TripScreen()];
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icons.play_circle_outline,
             label: 'Start Driving',
           ),
-          FloatingNavBarItem(icon: Icons.history, label: 'History'),
+          FloatingNavBarItem(icon: Icons.route, label: 'Trips'),
         ],
       ),
     );
