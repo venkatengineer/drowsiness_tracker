@@ -16,6 +16,8 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>driver_assist</string>
+	<key>NSCameraUsageDescription</key>
+	<string>DriveGuard AI uses the camera to monitor driver drowsiness while driving.</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
