@@ -5,7 +5,7 @@ services:
     build: .
     container_name: driver_assist_backend
     ports:
-      - "8000:8000"
+      - "6942:6942"
     environment:
       - DATABASE_BACKEND=sqlite  # Set to 'mysql' to use MySQL
       - SQLITE_DATABASE=/app/db/driver_assist.db

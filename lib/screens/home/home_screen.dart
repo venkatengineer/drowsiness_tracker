@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../routes/app_routes.dart';
 import '../../widgets/floating_navbar.dart';
 import 'start_driving_screen.dart';
 import 'trip_screen.dart';
@@ -16,10 +17,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static const _pages = [StartDrivingScreen(), TripScreen()];
 
+  void _logout() {
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       extendBody: true,
+      appBar: AppBar(
+        title: const Text('DriveGuard AI'),
+        actions: [
+          Tooltip(
+            message: 'Logout',
+            child: IconButton(
+              onPressed: _logout,
+              icon: const Icon(Icons.logout_rounded),
+            ),
+          ),
+        ],
+      ),
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 280),
         switchInCurve: Curves.easeOutCubic,

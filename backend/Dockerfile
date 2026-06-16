@@ -4,7 +4,7 @@ FROM python:3.8-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV FLASK_PORT=8000
+ENV FLASK_PORT=6942
 ENV FLASK_HOST=0.0.0.0
 
 # Set work directory
@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Expose the application port
-EXPOSE 8000
+EXPOSE 6942
 
 # Run the FastAPI server using Uvicorn
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "6942"]

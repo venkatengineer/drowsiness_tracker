@@ -26,7 +26,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The server listens on `http://0.0.0.0:8000` by default.
+The server listens on `http://0.0.0.0:6942` by default.
 
 ## Database
 
@@ -56,6 +56,8 @@ Make sure MySQL is running before starting the backend when using
 - `GET /health`
 - `POST /auth/register`
 - `POST /auth/login`
+- `GET /users/{user_id}`
+- `POST /users/details`
 
 Register payload:
 
@@ -74,5 +76,21 @@ Login payload:
 {
   "username": "driver1",
   "password": "secret123"
+}
+```
+
+User details payload:
+
+```json
+{
+  "username": "driver1"
+}
+```
+
+or:
+
+```json
+{
+  "user_id": 1
 }
 ```

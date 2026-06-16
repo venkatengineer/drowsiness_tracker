@@ -162,6 +162,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class UserDetailsRequest(BaseModel):
+    username: Optional[str] = None
+    user_id: Optional[int] = None
+
+
 @app.get("/")
 def index():
     return {
@@ -171,7 +176,9 @@ def index():
         "endpoints": [
             "/health",
             "/auth/register",
-            "/auth/login"
+            "/auth/login",
+            "/users/{user_id}",
+            "/users/details",
         ]
     }
 
@@ -261,11 +268,57 @@ def login(payload: LoginRequest):
     }
 
 
+def _fetch_user_details(where_clause, params):
+    try:
+        with db_connection() as connection:
+            cursor = (
+                connection.cursor(dictionary=True)
+                if DATABASE_BACKEND == "mysql"
+                else connection.cursor()
+            )
+            cursor.execute(
+                f"""
+                SELECT id, username, email, phone_number, created_at
+                FROM users
+                WHERE {where_clause}
+                """,
+                params,
+            )
+            user = _user_to_dict(cursor.fetchone())
+            cursor.close()
+    except (mysql.connector.Error, sqlite3.Error):
+        raise HTTPException(status_code=500, detail="Database error while fetching user details.")
+
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    return {"user": user}
+
+
+@app.get("/users/{user_id}")
+def get_user_details(user_id: int):
+    return _fetch_user_details(f"id = {_placeholder()}", (user_id,))
+
+
+@app.post("/users/details")
+def post_user_details(payload: UserDetailsRequest):
+    placeholder = _placeholder()
+
+    if payload.user_id is not None:
+        return _fetch_user_details(f"id = {placeholder}", (payload.user_id,))
+
+    username = payload.username.strip() if payload.username else ""
+    if username:
+        return _fetch_user_details(f"username = {placeholder}", (username,))
+
+    raise HTTPException(status_code=400, detail="Username or user_id is required.")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "app:app",
         host=os.getenv("FLASK_HOST", "0.0.0.0"),
-        port=int(os.getenv("FLASK_PORT", "8000")),
+        port=int(os.getenv("FLASK_PORT", "6942")),
         reload=os.getenv("FLASK_DEBUG", "1") == "1",
     )
