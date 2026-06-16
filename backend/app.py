@@ -70,6 +70,23 @@ def init_database():
                 )
                 """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_details (
+                  user_id BIGINT UNSIGNED NOT NULL,
+                  full_name VARCHAR(255) NULL,
+                  age INT NULL,
+                  gender VARCHAR(50) NULL,
+                  vehicle_number VARCHAR(80) NULL,
+                  vehicle_type VARCHAR(50) NULL,
+                  emergency_contact_name VARCHAR(255) NULL,
+                  emergency_contact_number VARCHAR(32) NULL,
+                  average_daily_driving_hours INT NULL,
+                  PRIMARY KEY (user_id),
+                  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                )
+                """
+            )
         else:
             cursor.execute(
                 """
@@ -80,6 +97,22 @@ def init_database():
                   email TEXT NULL,
                   phone_number TEXT NULL,
                   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_details (
+                  user_id INTEGER PRIMARY KEY,
+                  full_name TEXT NULL,
+                  age INTEGER NULL,
+                  gender TEXT NULL,
+                  vehicle_number TEXT NULL,
+                  vehicle_type TEXT NULL,
+                  emergency_contact_name TEXT NULL,
+                  emergency_contact_number TEXT NULL,
+                  average_daily_driving_hours INTEGER NULL,
+                  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 )
                 """
             )
@@ -167,6 +200,18 @@ class UserDetailsRequest(BaseModel):
     user_id: Optional[int] = None
 
 
+class OnboardingRequest(BaseModel):
+    user_id: int
+    full_name: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    vehicle_number: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_number: Optional[str] = None
+    average_daily_driving_hours: Optional[int] = None
+
+
 @app.get("/")
 def index():
     return {
@@ -176,9 +221,7 @@ def index():
         "endpoints": [
             "/health",
             "/auth/register",
-            "/auth/login",
-            "/users/{user_id}",
-            "/users/details",
+            "/auth/login"
         ]
     }
 
@@ -278,25 +321,28 @@ def _fetch_user_details(where_clause, params):
             )
             cursor.execute(
                 f"""
-                SELECT id, username, email, phone_number, created_at
-                FROM users
-                WHERE {where_clause}
+                SELECT u.id, u.username, u.email, u.phone_number, u.created_at,
+                       ud.full_name, ud.age, ud.gender, ud.vehicle_number, ud.vehicle_type,
+                       ud.emergency_contact_name, ud.emergency_contact_number, ud.average_daily_driving_hours
+                FROM users u
+                LEFT JOIN user_details ud ON u.id = ud.user_id
+                WHERE u.{where_clause}
                 """,
                 params,
             )
             user = _user_to_dict(cursor.fetchone())
             cursor.close()
-    except (mysql.connector.Error, sqlite3.Error):
-        raise HTTPException(status_code=500, detail="Database error while fetching user details.")
+    except (mysql.connector.Error, sqlite3.Error) as err:
+        raise HTTPException(status_code=500, detail=f"Database error while fetching user details: {err}")
 
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    return {"user": user}
+    return user
 
 
 @app.get("/users/{user_id}")
-def get_user_details(user_id: int):
+def get_user_details_by_id(user_id: int):
     return _fetch_user_details(f"id = {_placeholder()}", (user_id,))
 
 
@@ -312,6 +358,70 @@ def post_user_details(payload: UserDetailsRequest):
         return _fetch_user_details(f"username = {placeholder}", (username,))
 
     raise HTTPException(status_code=400, detail="Username or user_id is required.")
+
+
+@app.post("/users/onboarding")
+def save_onboarding_details(payload: OnboardingRequest):
+    placeholder = _placeholder()
+    try:
+        with db_connection() as connection:
+            cursor = connection.cursor()
+            
+            if DATABASE_BACKEND == "mysql":
+                cursor.execute("SELECT 1 FROM user_details WHERE user_id = %s", (payload.user_id,))
+            else:
+                cursor.execute("SELECT 1 FROM user_details WHERE user_id = ?", (payload.user_id,))
+            
+            exists = cursor.fetchone() is not None
+            
+            if exists:
+                cursor.execute(
+                    f"""
+                    UPDATE user_details
+                    SET full_name = {placeholder}, age = {placeholder}, gender = {placeholder},
+                        vehicle_number = {placeholder}, vehicle_type = {placeholder},
+                        emergency_contact_name = {placeholder}, emergency_contact_number = {placeholder},
+                        average_daily_driving_hours = {placeholder}
+                    WHERE user_id = {placeholder}
+                    """,
+                    (
+                        payload.full_name,
+                        payload.age,
+                        payload.gender,
+                        payload.vehicle_number,
+                        payload.vehicle_type,
+                        payload.emergency_contact_name,
+                        payload.emergency_contact_number,
+                        payload.average_daily_driving_hours,
+                        payload.user_id
+                    ),
+                )
+            else:
+                cursor.execute(
+                    f"""
+                    INSERT INTO user_details (user_id, full_name, age, gender, vehicle_number, vehicle_type,
+                                             emergency_contact_name, emergency_contact_number, average_daily_driving_hours)
+                    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder},
+                            {placeholder}, {placeholder}, {placeholder})
+                    """,
+                    (
+                        payload.user_id,
+                        payload.full_name,
+                        payload.age,
+                        payload.gender,
+                        payload.vehicle_number,
+                        payload.vehicle_type,
+                        payload.emergency_contact_name,
+                        payload.emergency_contact_number,
+                        payload.average_daily_driving_hours
+                    ),
+                )
+            connection.commit()
+            cursor.close()
+    except (mysql.connector.Error, sqlite3.Error) as err:
+        raise HTTPException(status_code=500, detail=f"Database error while saving onboarding details: {err}")
+
+    return {"message": "Onboarding details saved successfully."}
 
 
 if __name__ == "__main__":

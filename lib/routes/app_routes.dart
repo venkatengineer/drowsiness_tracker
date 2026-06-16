@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/home/home_screen.dart';
+import '../screens/home/profile_screen.dart';
 import '../screens/onboarding/onboarding_screen.dart';
 
 class AppRoutes {
@@ -12,6 +13,7 @@ class AppRoutes {
   static const String register = '/register';
   static const String onboarding = '/onboarding';
   static const String home = '/home';
+  static const String profile = '/profile';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
@@ -19,6 +21,7 @@ class AppRoutes {
       register => const RegisterScreen(),
       onboarding => const OnboardingScreen(),
       home => const HomeScreen(),
+      profile => const ProfileScreen(),
       _ => const LoginScreen(),
     };
 

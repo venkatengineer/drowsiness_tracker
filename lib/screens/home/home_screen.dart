@@ -17,10 +17,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static const _pages = [StartDrivingScreen(), TripScreen()];
 
-  void _logout() {
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+  void _goToProfile() {
+    Navigator.of(context).pushNamed(AppRoutes.profile);
   }
 
   @override
@@ -31,10 +29,10 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('DriveGuard AI'),
         actions: [
           Tooltip(
-            message: 'Logout',
+            message: 'Profile',
             child: IconButton(
-              onPressed: _logout,
-              icon: const Icon(Icons.logout_rounded),
+              onPressed: _goToProfile,
+              icon: const Icon(Icons.account_circle_outlined),
             ),
           ),
         ],
