@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Databases and secrets
+*.db
+*.db-journal
+.env
+
+# Editor and system directories
+.git/
+.idea/
+.vscode/
+*.swp
+.DS_Store

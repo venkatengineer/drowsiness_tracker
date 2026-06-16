@@ -147,12 +147,10 @@ class TripScreen extends StatelessWidget {
                   Text(
                     'Review your completed journeys and driver alertness analytics.',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Theme.of(context)
-                              .textTheme
-                              .bodyLarge
-                              ?.color
-                              ?.withValues(alpha: 0.68),
-                        ),
+                      color: Theme.of(
+                        context,
+                      ).textTheme.bodyLarge?.color?.withValues(alpha: 0.68),
+                    ),
                   ),
                   const SizedBox(height: 22),
                   ..._dummyTrips.map((trip) {
@@ -202,9 +200,7 @@ class _TripCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(28)),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -217,22 +213,22 @@ class _TripCard extends StatelessWidget {
                     TripDetailsScreen(trip: trip),
                 transitionsBuilder:
                     (context, animation, secondaryAnimation, child) {
-                  final curved = CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutCubic,
-                    reverseCurve: Curves.easeInCubic,
-                  );
-                  return FadeTransition(
-                    opacity: curved,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0.08, 0.03),
-                        end: Offset.zero,
-                      ).animate(curved),
-                      child: child,
-                    ),
-                  );
-                },
+                      final curved = CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                        reverseCurve: Curves.easeInCubic,
+                      );
+                      return FadeTransition(
+                        opacity: curved,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0.08, 0.03),
+                            end: Offset.zero,
+                          ).animate(curved),
+                          child: child,
+                        ),
+                      );
+                    },
               ),
             );
           },
@@ -248,11 +244,7 @@ class _TripCard extends StatelessWidget {
                     color: scoreColor.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(18),
                   ),
-                  child: Icon(
-                    _getTripIcon(),
-                    color: scoreColor,
-                    size: 26,
-                  ),
+                  child: Icon(_getTripIcon(), color: scoreColor, size: 26),
                 ),
                 const SizedBox(width: 16),
                 // Details
@@ -266,21 +258,16 @@ class _TripCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               trip.tripName,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           Icon(
                             Icons.chevron_right_rounded,
-                            color: Theme.of(context)
-                                .iconTheme
-                                .color
-                                ?.withValues(alpha: 0.5),
+                            color: Theme.of(
+                              context,
+                            ).iconTheme.color?.withValues(alpha: 0.5),
                             size: 24,
                           ),
                         ],
@@ -292,42 +279,32 @@ class _TripCard extends StatelessWidget {
                           Icon(
                             Icons.calendar_today_rounded,
                             size: 13,
-                            color: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.color
+                            color: Theme.of(context).textTheme.bodyMedium?.color
                                 ?.withValues(alpha: 0.5),
                           ),
                           const SizedBox(width: 4),
                           Text(
                             trip.date,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.color
-                                        ?.withValues(alpha: 0.6),
-                                  ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.color
+                                      ?.withValues(alpha: 0.6),
+                                ),
                           ),
                           const SizedBox(width: 16),
                           Icon(
                             Icons.access_time_rounded,
                             size: 13,
-                            color: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.color
+                            color: Theme.of(context).textTheme.bodyMedium?.color
                                 ?.withValues(alpha: 0.5),
                           ),
                           const SizedBox(width: 4),
                           Text(
                             trip.duration,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
+                            style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
                                   color: Theme.of(context)
                                       .textTheme
@@ -345,7 +322,9 @@ class _TripCard extends StatelessWidget {
                           // Status
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: isDark
                                   ? Colors.white.withValues(alpha: 0.08)
@@ -354,9 +333,7 @@ class _TripCard extends StatelessWidget {
                             ),
                             child: Text(
                               trip.status,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
+                              style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
                                     fontWeight: FontWeight.w600,
                                     color: isDark
@@ -369,7 +346,9 @@ class _TripCard extends StatelessWidget {
                           // Drowsiness Score
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: scoreColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(10),
@@ -380,9 +359,7 @@ class _TripCard extends StatelessWidget {
                             ),
                             child: Text(
                               '${(trip.drowsinessScore * 100).toInt()}% Drowsiness',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
+                              style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
                                     fontWeight: FontWeight.bold,
                                     color: scoreColor,

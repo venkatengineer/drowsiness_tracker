@@ -39,9 +39,9 @@ class TripDetailsScreen extends StatelessWidget {
         ),
         title: Text(
           'Trip Details',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
         actions: [
           Padding(
@@ -55,11 +55,16 @@ class TripDetailsScreen extends StatelessWidget {
               ),
               style: TextButton.styleFrom(
                 foregroundColor: Theme.of(context).colorScheme.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                   side: BorderSide(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.3),
                   ),
                 ),
               ),
@@ -87,16 +92,16 @@ class TripDetailsScreen extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 trip.tripName,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall
+                                style: Theme.of(context).textTheme.headlineSmall
                                     ?.copyWith(fontWeight: FontWeight.bold),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: riskColor.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(12),
@@ -142,7 +147,8 @@ class TripDetailsScreen extends StatelessWidget {
 
                             if (isWide) {
                               return Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: children
                                     .map((item) => Expanded(child: item))
                                     .toList(),
@@ -150,11 +156,14 @@ class TripDetailsScreen extends StatelessWidget {
                             } else {
                               return Column(
                                 children: children
-                                    .map((item) => Padding(
-                                          padding:
-                                              const EdgeInsets.only(bottom: 8.0),
-                                          child: item,
-                                        ))
+                                    .map(
+                                      (item) => Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 8.0,
+                                        ),
+                                        child: item,
+                                      ),
+                                    )
                                     .toList(),
                               );
                             }
@@ -172,9 +181,7 @@ class TripDetailsScreen extends StatelessWidget {
                       children: [
                         Text(
                           'Visual Analytics',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 20),
@@ -198,25 +205,25 @@ class TripDetailsScreen extends StatelessWidget {
                                 activeColor: trip.drowsinessScore >= 0.30
                                     ? AppColors.urgent
                                     : (trip.drowsinessScore >= 0.15
-                                        ? AppColors.warning
-                                        : AppColors.safe),
+                                          ? AppColors.warning
+                                          : AppColors.safe),
                               ),
                               _AnalyticsGauge(
                                 value: trip.fatigueLevel.toLowerCase() == 'high'
                                     ? 0.85
                                     : (trip.fatigueLevel.toLowerCase() ==
-                                            'moderate'
-                                        ? 0.50
-                                        : 0.15),
+                                              'moderate'
+                                          ? 0.50
+                                          : 0.15),
                                 label: 'Fatigue Level',
                                 centerText: trip.fatigueLevel,
                                 activeColor:
                                     trip.fatigueLevel.toLowerCase() == 'high'
-                                        ? AppColors.urgent
-                                        : (trip.fatigueLevel.toLowerCase() ==
-                                                'moderate'
-                                            ? AppColors.warning
-                                            : AppColors.safe),
+                                    ? AppColors.urgent
+                                    : (trip.fatigueLevel.toLowerCase() ==
+                                              'moderate'
+                                          ? AppColors.warning
+                                          : AppColors.safe),
                               ),
                             ];
 
@@ -229,11 +236,14 @@ class TripDetailsScreen extends StatelessWidget {
                             } else {
                               return Column(
                                 children: gauges
-                                    .map((gauge) => Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 12.0),
-                                          child: gauge,
-                                        ))
+                                    .map(
+                                      (gauge) => Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12.0,
+                                        ),
+                                        child: gauge,
+                                      ),
+                                    )
                                     .toList(),
                               );
                             }
@@ -251,9 +261,7 @@ class TripDetailsScreen extends StatelessWidget {
                       children: [
                         Text(
                           'Driver Monitoring Statistics',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
+                          style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 18),
@@ -306,22 +314,25 @@ class TripDetailsScreen extends StatelessWidget {
                                 physics: const NeverScrollableScrollPhysics(),
                                 gridDelegate:
                                     const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 14,
-                                  mainAxisSpacing: 14,
-                                  childAspectRatio: 3.8,
-                                ),
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 14,
+                                      mainAxisSpacing: 14,
+                                      childAspectRatio: 3.8,
+                                    ),
                                 itemCount: stats.length,
                                 itemBuilder: (context, index) => stats[index],
                               );
                             } else {
                               return Column(
                                 children: stats
-                                    .map((stat) => Padding(
-                                          padding: const EdgeInsets.only(
-                                              bottom: 12.0),
-                                          child: stat,
-                                        ))
+                                    .map(
+                                      (stat) => Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 12.0,
+                                        ),
+                                        child: stat,
+                                      ),
+                                    )
                                     .toList(),
                               );
                             }
@@ -378,18 +389,16 @@ class _SummaryItem extends StatelessWidget {
             Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.color
-                        ?.withValues(alpha: 0.6),
-                  ),
+                color: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.color?.withValues(alpha: 0.6),
+              ),
             ),
             Text(
               value,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -444,9 +453,9 @@ class _AnalyticsGauge extends StatelessWidget {
             // Value text
             Text(
               centerText,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -454,13 +463,11 @@ class _AnalyticsGauge extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.color
-                    ?.withValues(alpha: 0.8),
-              ),
+            fontWeight: FontWeight.w600,
+            color: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.color?.withValues(alpha: 0.8),
+          ),
           textAlign: TextAlign.center,
         ),
       ],
@@ -506,11 +513,7 @@ class _StatItem extends StatelessWidget {
               color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 20,
-            ),
+            child: Icon(icon, color: color, size: 20),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -521,20 +524,18 @@ class _StatItem extends StatelessWidget {
                 Text(
                   label,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.color
-                            ?.withValues(alpha: 0.6),
-                      ),
+                    color: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.color?.withValues(alpha: 0.6),
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
                   value,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -642,27 +643,25 @@ class _PdfExportDialogState extends State<_PdfExportDialog> {
                             size: 19,
                           )
                         : (i == _currentStep && !_isFinished)
-                            ? const Center(
-                                child: SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              )
-                            : i == _steps.length - 1 && _isFinished
-                                ? const Icon(
-                                    Icons.check_circle_rounded,
-                                    color: AppColors.safe,
-                                    size: 19,
-                                  )
-                                : Icon(
-                                    Icons.radio_button_unchecked_rounded,
-                                    color: theme.textTheme.bodyMedium?.color
-                                        ?.withValues(alpha: 0.2),
-                                    size: 18,
-                                  ),
+                        ? const Center(
+                            child: SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : i == _steps.length - 1 && _isFinished
+                        ? const Icon(
+                            Icons.check_circle_rounded,
+                            color: AppColors.safe,
+                            size: 19,
+                          )
+                        : Icon(
+                            Icons.radio_button_unchecked_rounded,
+                            color: theme.textTheme.bodyMedium?.color
+                                ?.withValues(alpha: 0.2),
+                            size: 18,
+                          ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -671,8 +670,9 @@ class _PdfExportDialogState extends State<_PdfExportDialog> {
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: i <= _currentStep
                             ? theme.textTheme.bodyMedium?.color
-                            : theme.textTheme.bodyMedium?.color
-                                ?.withValues(alpha: 0.4),
+                            : theme.textTheme.bodyMedium?.color?.withValues(
+                                alpha: 0.4,
+                              ),
                         fontWeight: i == _currentStep
                             ? FontWeight.bold
                             : FontWeight.normal,
@@ -693,13 +693,18 @@ class _PdfExportDialogState extends State<_PdfExportDialog> {
                 child: LinearProgressIndicator(
                   value: (_currentStep + 1) / _steps.length,
                   minHeight: 5,
-                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  backgroundColor: theme.colorScheme.primary.withValues(
+                    alpha: 0.1,
+                  ),
                 ),
               ),
             ] else ...[
               // Success notice
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.safe.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -744,7 +749,7 @@ class _PdfExportDialogState extends State<_PdfExportDialog> {
                     child: const Text('Close'),
                   ),
                 ],
-              )
+              ),
             ],
           ],
         ),

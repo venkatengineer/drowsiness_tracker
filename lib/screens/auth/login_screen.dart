@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/services/auth_api.dart';
 import '../../routes/app_routes.dart';
 import '../../widgets/glass_button.dart';
 import '../../widgets/glass_card.dart';
@@ -14,7 +15,52 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _authApi = AuthApi();
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+
+    if (username.isEmpty || password.isEmpty) {
+      _showMessage('Username and password are required.');
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    try {
+      await _authApi.login(username: username, password: password);
+      if (!mounted) {
+        return;
+      }
+      Navigator.pushReplacementNamed(context, AppRoutes.home);
+    } on AuthApiException catch (error) {
+      _showMessage(error.message);
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,16 +126,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 28),
-                      const GlassTextField(
-                        label: 'Email',
-                        icon: Icons.email_outlined,
-                        keyboardType: TextInputType.emailAddress,
+                      GlassTextField(
+                        controller: _usernameController,
+                        label: 'Username',
+                        icon: Icons.person_outline,
+                        textInputAction: TextInputAction.next,
+                        autofillHints: const [AutofillHints.username],
                       ),
                       const SizedBox(height: 16),
                       GlassTextField(
+                        controller: _passwordController,
                         label: 'Password',
                         icon: Icons.lock_outline,
                         obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: const [AutofillHints.password],
                         suffixIcon: IconButton(
                           tooltip: _obscurePassword
                               ? 'Show password'
@@ -106,12 +157,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 24),
                       GlassButton(
-                        label: 'Login',
+                        label: _isSubmitting ? 'Logging In...' : 'Login',
                         icon: Icons.login,
-                        onPressed: () => Navigator.pushReplacementNamed(
-                          context,
-                          AppRoutes.home,
-                        ),
+                        onPressed: _isSubmitting ? () {} : _login,
                       ),
                       const SizedBox(height: 18),
                       Wrap(

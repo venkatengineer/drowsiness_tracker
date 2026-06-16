@@ -1,0 +1,271 @@
+import os
+import sqlite3
+from contextlib import contextmanager, asynccontextmanager
+
+import mysql.connector
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from mysql.connector import errorcode
+from pydantic import BaseModel
+from typing import Optional
+from werkzeug.security import check_password_hash, generate_password_hash
+
+load_dotenv()
+
+
+def _mysql_config(database=None):
+    config = {
+        "host": os.getenv("MYSQL_HOST", "127.0.0.1"),
+        "port": int(os.getenv("MYSQL_PORT", "3306")),
+        "user": os.getenv("MYSQL_USER", "root"),
+        "password": os.getenv("MYSQL_PASSWORD", ""),
+    }
+    if database:
+        config["database"] = database
+    return config
+
+
+DATABASE_BACKEND = os.getenv("DATABASE_BACKEND", "sqlite").lower()
+DATABASE_NAME = os.getenv("MYSQL_DATABASE", "driver_assist")
+SQLITE_DATABASE = os.getenv("SQLITE_DATABASE", "driver_assist.db")
+
+
+@contextmanager
+def db_connection(database=DATABASE_NAME):
+    if DATABASE_BACKEND == "mysql":
+        connection = mysql.connector.connect(**_mysql_config(database=database))
+    else:
+        connection = sqlite3.connect(SQLITE_DATABASE)
+        connection.row_factory = sqlite3.Row
+    try:
+        yield connection
+    finally:
+        connection.close()
+
+
+def init_database():
+    if DATABASE_BACKEND == "mysql":
+        with mysql.connector.connect(**_mysql_config()) as connection:
+            cursor = connection.cursor()
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{DATABASE_NAME}`")
+            cursor.close()
+
+    with db_connection() as connection:
+        cursor = connection.cursor()
+        if DATABASE_BACKEND == "mysql":
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                  username VARCHAR(80) NOT NULL,
+                  password_hash VARCHAR(255) NOT NULL,
+                  email VARCHAR(255) NULL,
+                  phone_number VARCHAR(32) NULL,
+                  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (id),
+                  UNIQUE KEY users_username_unique (username)
+                )
+                """
+            )
+        else:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  username TEXT NOT NULL UNIQUE,
+                  password_hash TEXT NOT NULL,
+                  email TEXT NULL,
+                  phone_number TEXT NULL,
+                  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        connection.commit()
+        cursor.close()
+
+
+def _placeholder():
+    return "%s" if DATABASE_BACKEND == "mysql" else "?"
+
+
+def _is_duplicate_username_error(error):
+    if DATABASE_BACKEND == "mysql":
+        return isinstance(error, mysql.connector.Error) and error.errno == errorcode.ER_DUP_ENTRY
+    return isinstance(error, sqlite3.IntegrityError)
+
+
+def _user_to_dict(user):
+    return dict(user) if isinstance(user, sqlite3.Row) else user
+
+
+# Lifespan context manager for database initialization
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_database()
+    yield
+
+
+app = FastAPI(
+    title="Driver Assist API",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Configure CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Override error handling to match the format expected by the client: {"message": "..."}
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": exc.detail},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    if errors:
+        error = errors[0]
+        field = error.get("loc", ["field"])[-1]
+        msg = error.get("msg", "Validation error")
+        message = f"Invalid input for {field}: {msg}"
+    else:
+        message = "Validation error"
+    return JSONResponse(
+        status_code=400,
+        content={"message": message},
+    )
+
+
+# Request Schemas
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.get("/")
+def index():
+    return {
+        "name": "Driver Assist API",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": [
+            "/health",
+            "/auth/register",
+            "/auth/login"
+        ]
+    }
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.post("/auth/register")
+def register(payload: RegisterRequest):
+    username = payload.username.strip() if payload.username else ""
+    password = payload.password
+    email = payload.email.strip() if payload.email else None
+    phone_number = payload.phone_number.strip() if payload.phone_number else None
+
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username and password are required.")
+
+    if len(username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters.")
+
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+
+    password_hash = generate_password_hash(password)
+    placeholder = _placeholder()
+
+    try:
+        with db_connection() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                f"""
+                INSERT INTO users (username, password_hash, email, phone_number)
+                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder})
+                """,
+                (username, password_hash, email, phone_number),
+            )
+            connection.commit()
+            user_id = cursor.lastrowid
+            cursor.close()
+    except (mysql.connector.Error, sqlite3.Error) as error:
+        if _is_duplicate_username_error(error):
+            raise HTTPException(status_code=409, detail="Username already exists.")
+        raise HTTPException(status_code=500, detail="Database error while registering user.")
+
+    return JSONResponse(
+        status_code=201,
+        content={
+            "message": "Registration successful.",
+            "user": {"id": user_id, "username": username},
+        }
+    )
+
+
+@app.post("/auth/login")
+def login(payload: LoginRequest):
+    username = payload.username.strip() if payload.username else ""
+    password = payload.password
+
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username and password are required.")
+
+    placeholder = _placeholder()
+    try:
+        with db_connection() as connection:
+            cursor = (
+                connection.cursor(dictionary=True)
+                if DATABASE_BACKEND == "mysql"
+                else connection.cursor()
+            )
+            cursor.execute(
+                f"SELECT id, username, password_hash FROM users WHERE username = {placeholder}",
+                (username,),
+            )
+            user = _user_to_dict(cursor.fetchone())
+            cursor.close()
+    except (mysql.connector.Error, sqlite3.Error):
+        raise HTTPException(status_code=500, detail="Database error while logging in.")
+
+    if user is None or not check_password_hash(user["password_hash"], password):
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+    return {
+        "message": "Login successful.",
+        "user": {"id": user["id"], "username": user["username"]},
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "app:app",
+        host=os.getenv("FLASK_HOST", "0.0.0.0"),
+        port=int(os.getenv("FLASK_PORT", "8000")),
+        reload=os.getenv("FLASK_DEBUG", "1") == "1",
+    )
