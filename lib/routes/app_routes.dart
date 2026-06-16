@@ -5,11 +5,13 @@ import '../screens/auth/register_screen.dart';
 import '../screens/home/home_screen.dart';
 import '../screens/home/profile_screen.dart';
 import '../screens/onboarding/onboarding_screen.dart';
+import '../screens/splash/splash_screen.dart';
 
 class AppRoutes {
   const AppRoutes._();
 
-  static const String login = '/';
+  static const String splash = '/';
+  static const String login = '/login';
   static const String register = '/register';
   static const String onboarding = '/onboarding';
   static const String home = '/home';
@@ -17,12 +19,13 @@ class AppRoutes {
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
+      splash => const SplashScreen(),
       login => const LoginScreen(),
       register => const RegisterScreen(),
       onboarding => const OnboardingScreen(),
       home => const HomeScreen(),
       profile => const ProfileScreen(),
-      _ => const LoginScreen(),
+      _ => const SplashScreen(),
     };
 
     return PageRouteBuilder<void>(

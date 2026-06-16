@@ -4,21 +4,21 @@ import 'core/theme/app_theme.dart';
 import 'routes/app_routes.dart';
 
 void main() {
-  runApp(const DriveGuardApp());
+  runApp(const DriverAssistApp());
 }
 
-class DriveGuardApp extends StatelessWidget {
-  const DriveGuardApp({super.key});
+class DriverAssistApp extends StatelessWidget {
+  const DriverAssistApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'DriveGuard AI',
+      title: 'Driver Assist',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
-      initialRoute: AppRoutes.login,
+      initialRoute: AppRoutes.splash,
       onGenerateRoute: AppRoutes.onGenerateRoute,
     );
   }

@@ -26,7 +26,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       extendBody: true,
       appBar: AppBar(
-        title: const Text('DriveGuard AI'),
+        title: const Text('Driver Assist'),
         actions: [
           Tooltip(
             message: 'Profile',
