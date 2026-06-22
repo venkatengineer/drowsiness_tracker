@@ -1,6 +1,8 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/services/open_maps_api.dart';
@@ -25,6 +27,7 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
   bool _isMonitoring = false;
   bool _showCameraPreview = false;
   String? _cameraError;
+  final _mapController = MapController();
 
   bool get _isCameraReady =>
       _cameraController != null && _cameraController!.value.isInitialized;
@@ -52,6 +55,7 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _cameraController?.dispose();
+    _mapController.dispose();
     super.dispose();
   }
 
@@ -79,6 +83,7 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
         _isMonitoring = true;
         _showCameraPreview = false;
       });
+      _focusSelectedPlaces();
       await _initializeCamera();
     } on _LocationSetupException catch (error) {
       if (!mounted) return;
@@ -88,6 +93,46 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
     } finally {
       if (mounted) setState(() => _isStartingMonitoring = false);
     }
+  }
+
+  void _focusSelectedPlaces() {
+    final start = _startPlace;
+    final end = _destination;
+    if (start == null || end == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final points = [
+        LatLng(start.latitude, start.longitude),
+        LatLng(end.latitude, end.longitude),
+      ];
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: LatLngBounds.fromPoints(points),
+          padding: const EdgeInsets.fromLTRB(60, 190, 60, 260),
+        ),
+      );
+    });
+  }
+
+  Widget _mapMarker({
+    required Color color,
+    required IconData icon,
+  }) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Icon(icon, color: Colors.white, size: 20),
+    );
   }
 
   Future<PlaceResult> _getCurrentPlace() async {
@@ -213,6 +258,221 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (_isMonitoring) {
+      final startPoint = LatLng(_startPlace!.latitude, _startPlace!.longitude);
+      final endPoint = LatLng(_destination!.latitude, _destination!.longitude);
+
+      return Scaffold(
+        body: Stack(
+          children: [
+            // Map
+            Positioned.fill(
+              child: FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: startPoint,
+                  initialZoom: 10,
+                  minZoom: 3,
+                  maxZoom: 19,
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.driver_assist',
+                    maxZoom: 19,
+                  ),
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: [startPoint, endPoint],
+                        color: AppColors.info,
+                        strokeWidth: 5,
+                      ),
+                    ],
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: startPoint,
+                        width: 44,
+                        height: 44,
+                        child: _mapMarker(
+                          color: AppColors.safe,
+                          icon: Icons.trip_origin_rounded,
+                        ),
+                      ),
+                      Marker(
+                        point: endPoint,
+                        width: 44,
+                        height: 44,
+                        child: _mapMarker(
+                          color: AppColors.urgent,
+                          icon: Icons.location_on_rounded,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const RichAttributionWidget(
+                    attributions: [
+                      TextSourceAttribution('OpenStreetMap contributors'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Top Floating Header: Navigation Card
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 12,
+              left: 16,
+              right: 16,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 620),
+                  child: GlassCard(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                    borderRadius: 20,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppColors.safe.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(
+                            Icons.navigation_rounded,
+                            color: AppColors.safe,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Navigating to destination',
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.color
+                                          ?.withValues(alpha: 0.6),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _destination!.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // Picture-in-Picture (PIP) Camera Preview Panel OR Floating Preview Button
+            if (_showCameraPreview)
+              Positioned(
+                bottom: 110,
+                right: 16,
+                child: SizedBox(
+                  width: 150,
+                  height: 200,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: GlassCard(
+                          padding: EdgeInsets.zero,
+                          borderRadius: 20,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: _CameraPreviewPanel(
+                              controller: _cameraController,
+                              isInitializing: _isInitializingCamera,
+                              error: _cameraError,
+                              onRetry: _initializeCamera,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: IconButton.filled(
+                          iconSize: 16,
+                          constraints: const BoxConstraints(
+                            minWidth: 28,
+                            minHeight: 28,
+                          ),
+                          padding: EdgeInsets.zero,
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.black54,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () => setState(() => _showCameraPreview = false),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Positioned(
+                bottom: 110,
+                right: 16,
+                child: FloatingActionButton.extended(
+                  heroTag: 'preview_camera_fab',
+                  backgroundColor: AppColors.info,
+                  foregroundColor: Colors.white,
+                  elevation: 6,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  onPressed: () => setState(() => _showCameraPreview = true),
+                  icon: const Icon(Icons.videocam_outlined),
+                  label: const Text('Preview Camera'),
+                ),
+              ),
+
+            // Floating Bottom Stop Button
+            Positioned(
+              bottom: MediaQuery.paddingOf(context).bottom + 16,
+              left: 16,
+              right: 16,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 620),
+                  child: GlassCard(
+                    padding: const EdgeInsets.all(12),
+                    borderRadius: 24,
+                    child: GlassButton(
+                      label: 'Stop Monitoring',
+                      icon: Icons.stop_rounded,
+                      color: AppColors.urgent,
+                      onPressed: _stopMonitoring,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final status = _monitoringStatus;
 
     return Scaffold(
