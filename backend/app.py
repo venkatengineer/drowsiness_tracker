@@ -46,6 +46,28 @@ def db_connection(database=DATABASE_NAME):
         connection.close()
 
 
+def _ensure_trip_columns(cursor):
+    columns = {
+        "start_latitude": "DOUBLE NULL" if DATABASE_BACKEND == "mysql" else "REAL NULL",
+        "start_longitude": "DOUBLE NULL" if DATABASE_BACKEND == "mysql" else "REAL NULL",
+        "end_latitude": "DOUBLE NULL" if DATABASE_BACKEND == "mysql" else "REAL NULL",
+        "end_longitude": "DOUBLE NULL" if DATABASE_BACKEND == "mysql" else "REAL NULL",
+    }
+
+    if DATABASE_BACKEND == "mysql":
+        for column, column_type in columns.items():
+            cursor.execute("SHOW COLUMNS FROM trip LIKE %s", (column,))
+            if cursor.fetchone() is None:
+                cursor.execute(f"ALTER TABLE trip ADD COLUMN {column} {column_type}")
+        return
+
+    cursor.execute("PRAGMA table_info(trip)")
+    existing_columns = {row[1] for row in cursor.fetchall()}
+    for column, column_type in columns.items():
+        if column not in existing_columns:
+            cursor.execute(f"ALTER TABLE trip ADD COLUMN {column} {column_type}")
+
+
 def init_database():
     if DATABASE_BACKEND == "mysql":
         with mysql.connector.connect(**_mysql_config()) as connection:
@@ -87,6 +109,23 @@ def init_database():
                 )
                 """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS trip (
+                  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                  user_id BIGINT UNSIGNED NULL,
+                  start_destination VARCHAR(255) NOT NULL,
+                  end_destination VARCHAR(255) NOT NULL,
+                  start_latitude DOUBLE NULL,
+                  start_longitude DOUBLE NULL,
+                  end_latitude DOUBLE NULL,
+                  end_longitude DOUBLE NULL,
+                  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  PRIMARY KEY (id),
+                  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+                )
+                """
+            )
         else:
             cursor.execute(
                 """
@@ -116,6 +155,23 @@ def init_database():
                 )
                 """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS trip (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  user_id INTEGER NULL,
+                  start_destination TEXT NOT NULL,
+                  end_destination TEXT NOT NULL,
+                  start_latitude REAL NULL,
+                  start_longitude REAL NULL,
+                  end_latitude REAL NULL,
+                  end_longitude REAL NULL,
+                  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+                )
+                """
+            )
+        _ensure_trip_columns(cursor)
         connection.commit()
         cursor.close()
 
@@ -212,6 +268,16 @@ class OnboardingRequest(BaseModel):
     average_daily_driving_hours: Optional[int] = None
 
 
+class TripRequest(BaseModel):
+    user_id: Optional[int] = None
+    start_destination: str
+    end_destination: str
+    start_latitude: Optional[float] = None
+    start_longitude: Optional[float] = None
+    end_latitude: Optional[float] = None
+    end_longitude: Optional[float] = None
+
+
 @app.get("/")
 def index():
     return {
@@ -221,7 +287,8 @@ def index():
         "endpoints": [
             "/health",
             "/auth/register",
-            "/auth/login"
+            "/auth/login",
+            "/trips"
         ]
     }
 
@@ -422,6 +489,98 @@ def save_onboarding_details(payload: OnboardingRequest):
         raise HTTPException(status_code=500, detail=f"Database error while saving onboarding details: {err}")
 
     return {"message": "Onboarding details saved successfully."}
+
+
+@app.post("/trips")
+def create_trip(payload: TripRequest):
+    start_destination = payload.start_destination.strip() if payload.start_destination else ""
+    end_destination = payload.end_destination.strip() if payload.end_destination else ""
+
+    if not start_destination or not end_destination:
+        raise HTTPException(status_code=400, detail="Start and end destinations are required.")
+
+    placeholder = _placeholder()
+    try:
+        with db_connection() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                f"""
+                INSERT INTO trip (
+                    user_id, start_destination, end_destination,
+                    start_latitude, start_longitude, end_latitude, end_longitude
+                )
+                VALUES (
+                    {placeholder}, {placeholder}, {placeholder},
+                    {placeholder}, {placeholder}, {placeholder}, {placeholder}
+                )
+                """,
+                (
+                    payload.user_id,
+                    start_destination,
+                    end_destination,
+                    payload.start_latitude,
+                    payload.start_longitude,
+                    payload.end_latitude,
+                    payload.end_longitude,
+                ),
+            )
+            connection.commit()
+            trip_id = cursor.lastrowid
+            cursor.close()
+    except (mysql.connector.Error, sqlite3.Error) as err:
+        raise HTTPException(status_code=500, detail=f"Database error while saving trip: {err}")
+
+    return JSONResponse(
+        status_code=201,
+        content={
+            "message": "Trip saved successfully.",
+            "trip": {
+                "id": trip_id,
+                "user_id": payload.user_id,
+                "start_destination": start_destination,
+                "end_destination": end_destination,
+                "start_latitude": payload.start_latitude,
+                "start_longitude": payload.start_longitude,
+                "end_latitude": payload.end_latitude,
+                "end_longitude": payload.end_longitude,
+            },
+        },
+    )
+
+
+@app.get("/trips")
+def list_trips(user_id: Optional[int] = None):
+    placeholder = _placeholder()
+    where_clause = ""
+    params = ()
+    if user_id is not None:
+        where_clause = f"WHERE user_id = {placeholder}"
+        params = (user_id,)
+
+    try:
+        with db_connection() as connection:
+            cursor = (
+                connection.cursor(dictionary=True)
+                if DATABASE_BACKEND == "mysql"
+                else connection.cursor()
+            )
+            cursor.execute(
+                f"""
+                SELECT id, user_id, start_destination, end_destination,
+                       start_latitude, start_longitude, end_latitude, end_longitude,
+                       created_at
+                FROM trip
+                {where_clause}
+                ORDER BY created_at DESC, id DESC
+                """,
+                params,
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+    except (mysql.connector.Error, sqlite3.Error) as err:
+        raise HTTPException(status_code=500, detail=f"Database error while fetching trips: {err}")
+
+    return {"trips": [_user_to_dict(row) for row in rows]}
 
 
 if __name__ == "__main__":

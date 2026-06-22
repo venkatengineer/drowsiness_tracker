@@ -18,6 +18,8 @@
 		<string>driver_assist</string>
 		<key>NSCameraUsageDescription</key>
 		<string>Driver Assist uses the camera to monitor driver drowsiness while driving.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Driver Assist uses your location as the starting point of your trip.</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>

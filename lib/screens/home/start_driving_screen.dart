@@ -1,9 +1,12 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/services/open_maps_api.dart';
 import '../../widgets/glass_button.dart';
 import '../../widgets/glass_card.dart';
+import 'create_trip_screen.dart';
 
 class StartDrivingScreen extends StatefulWidget {
   const StartDrivingScreen({super.key});
@@ -15,7 +18,12 @@ class StartDrivingScreen extends StatefulWidget {
 class _StartDrivingScreenState extends State<StartDrivingScreen>
     with WidgetsBindingObserver {
   CameraController? _cameraController;
+  PlaceResult? _startPlace;
+  PlaceResult? _destination;
   bool _isInitializingCamera = false;
+  bool _isStartingMonitoring = false;
+  bool _isMonitoring = false;
+  bool _showCameraPreview = false;
   String? _cameraError;
 
   bool get _isCameraReady =>
@@ -25,20 +33,17 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final controller = _cameraController;
-    if (controller == null || !controller.value.isInitialized) {
-      return;
-    }
+    if (controller == null || !controller.value.isInitialized) return;
 
     if (state == AppLifecycleState.inactive) {
       controller.dispose();
       _cameraController = null;
-    } else if (state == AppLifecycleState.resumed) {
+    } else if (state == AppLifecycleState.resumed && _isMonitoring) {
       _initializeCamera();
     }
   }
@@ -50,11 +55,96 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
     super.dispose();
   }
 
-  Future<void> _initializeCamera() async {
-    if (_isInitializingCamera) {
-      return;
+  Future<void> _startMonitoring() async {
+    if (_isStartingMonitoring || _isMonitoring) return;
+    setState(() => _isStartingMonitoring = true);
+
+    try {
+      final start = await _getCurrentPlace();
+      if (!mounted) return;
+
+      final destination = await Navigator.of(context).push<PlaceResult>(
+        MaterialPageRoute(
+          builder: (_) => CreateTripScreen(
+            initialStartPlace: start,
+            lockStartLocation: true,
+          ),
+        ),
+      );
+      if (destination == null || !mounted) return;
+
+      setState(() {
+        _startPlace = start;
+        _destination = destination;
+        _isMonitoring = true;
+        _showCameraPreview = false;
+      });
+      await _initializeCamera();
+    } on _LocationSetupException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _isStartingMonitoring = false);
+    }
+  }
+
+  Future<PlaceResult> _getCurrentPlace() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      throw const _LocationSetupException(
+        'Turn on location services to start monitoring.',
+      );
     }
 
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied) {
+      throw const _LocationSetupException(
+        'Location permission is required to set the trip starting point.',
+      );
+    }
+    if (permission == LocationPermission.deniedForever) {
+      throw const _LocationSetupException(
+        'Location permission is blocked. Enable it in device settings.',
+      );
+    }
+
+    late Position position;
+    try {
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+    } catch (_) {
+      throw const _LocationSetupException(
+        'Unable to determine your current location. Try again outdoors.',
+      );
+    }
+
+    final mapsApi = OpenMapsApi();
+    try {
+      return await mapsApi.reverseGeocode(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+    } on OpenMapsApiException {
+      return PlaceResult(
+        name: 'Current location',
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+    } finally {
+      mapsApi.close();
+    }
+  }
+
+  Future<void> _initializeCamera() async {
+    if (_isInitializingCamera) return;
     setState(() {
       _isInitializingCamera = true;
       _cameraError = null;
@@ -64,10 +154,9 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        if (!mounted) {
-          return;
+        if (mounted) {
+          setState(() => _cameraError = 'No camera was found on this device.');
         }
-        setState(() => _cameraError = 'No camera was found on this device.');
         return;
       }
 
@@ -75,13 +164,11 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
         (camera) => camera.lensDirection == CameraLensDirection.front,
         orElse: () => cameras.first,
       );
-
       controller = CameraController(
         selectedCamera,
         ResolutionPreset.medium,
         enableAudio: false,
       );
-
       await _cameraController?.dispose();
       await controller.initialize();
 
@@ -89,25 +176,29 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
         await controller.dispose();
         return;
       }
-
       setState(() => _cameraController = controller);
     } on CameraException catch (error) {
       await controller?.dispose();
-      if (!mounted) {
-        return;
-      }
-      setState(() => _cameraError = _cameraMessageFor(error));
+      if (mounted) setState(() => _cameraError = _cameraMessageFor(error));
     } catch (_) {
       await controller?.dispose();
-      if (!mounted) {
-        return;
-      }
-      setState(() => _cameraError = 'Unable to start the camera.');
+      if (mounted) setState(() => _cameraError = 'Unable to start the camera.');
     } finally {
-      if (mounted) {
-        setState(() => _isInitializingCamera = false);
-      }
+      if (mounted) setState(() => _isInitializingCamera = false);
     }
+  }
+
+  Future<void> _stopMonitoring() async {
+    await _cameraController?.dispose();
+    if (!mounted) return;
+    setState(() {
+      _cameraController = null;
+      _isMonitoring = false;
+      _showCameraPreview = false;
+      _cameraError = null;
+      _startPlace = null;
+      _destination = null;
+    });
   }
 
   String _cameraMessageFor(CameraException error) {
@@ -116,14 +207,13 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
       'CameraAccessDeniedWithoutPrompt' ||
       'CameraAccessRestricted' =>
         'Camera permission is required to monitor drowsiness.',
-      'AudioAccessDenied' => 'Camera started without microphone access.',
       _ => error.description ?? 'Unable to start the camera.',
     };
   }
 
   @override
   Widget build(BuildContext context) {
-    final status = _cameraStatus;
+    final status = _monitoringStatus;
 
     return Scaffold(
       body: SafeArea(
@@ -142,11 +232,13 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Monitor driver alertness in real time.',
+                    'Set your destination and monitor driver alertness.',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(
-                        context,
-                      ).textTheme.bodyLarge?.color?.withValues(alpha: 0.68),
+                      color: Theme.of(context)
+                          .textTheme
+                          .bodyLarge
+                          ?.color
+                          ?.withValues(alpha: 0.68),
                     ),
                   ),
                   const SizedBox(height: 22),
@@ -173,94 +265,89 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
                       ],
                     ),
                   ),
+                  if (_isMonitoring) ...[
+                    const SizedBox(height: 18),
+                    _ActiveTripCard(
+                      start: _startPlace!,
+                      destination: _destination!,
+                    ),
+                  ],
                   const SizedBox(height: 18),
                   GlassCard(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          'Driver Monitoring',
-                          style: Theme.of(context).textTheme.titleLarge,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Driver Monitoring',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                            ),
+                            if (_isCameraReady)
+                              _LiveBadge(visible: _showCameraPreview),
+                          ],
                         ),
                         const SizedBox(height: 18),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isWide = constraints.maxWidth >= 620;
-                            return CustomPaint(
-                              painter: _DashedBorderPainter(
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              child: AspectRatio(
-                                aspectRatio: isWide ? 16 / 9 : 3 / 4,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8),
-                                  child: _CameraPreviewPanel(
-                                    controller: _cameraController,
-                                    isInitializing: _isInitializingCamera,
-                                    error: _cameraError,
-                                    onRetry: _initializeCamera,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                        if (_showCameraPreview)
+                          AspectRatio(
+                            aspectRatio: 3 / 4,
+                            child: _CameraPreviewPanel(
+                              controller: _cameraController,
+                              isInitializing: _isInitializingCamera,
+                              error: _cameraError,
+                              onRetry: _initializeCamera,
+                            ),
+                          )
+                        else
+                          _HiddenCameraPanel(
+                            isMonitoring: _isMonitoring,
+                            isCameraReady: _isCameraReady,
+                            isInitializing: _isInitializingCamera,
+                            error: _cameraError,
+                            onRetry: _initializeCamera,
+                          ),
+                        if (_isMonitoring && _isCameraReady) ...[
+                          const SizedBox(height: 14),
+                          OutlinedButton.icon(
+                            onPressed: () => setState(
+                              () => _showCameraPreview = !_showCameraPreview,
+                            ),
+                            icon: Icon(
+                              _showCameraPreview
+                                  ? Icons.videocam_off_outlined
+                                  : Icons.preview_rounded,
+                            ),
+                            label: Text(
+                              _showCameraPreview
+                                  ? 'Hide Camera Preview'
+                                  : 'Preview Camera',
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                   const SizedBox(height: 18),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWide = constraints.maxWidth >= 680;
-                      final cards = const [
-                        _StatCard(
-                          label: 'Blink Count',
-                          value: '0',
-                          icon: Icons.remove_red_eye_outlined,
-                        ),
-                        _StatCard(
-                          label: 'Yawns',
-                          value: '0',
-                          icon: Icons.sentiment_dissatisfied_outlined,
-                        ),
-                        _StatCard(
-                          label: 'Drowsiness Score',
-                          value: '0%',
-                          icon: Icons.speed_outlined,
-                        ),
-                      ];
-                      if (!isWide) {
-                        return Column(
-                          children: [
-                            for (final card in cards) ...[
-                              card,
-                              const SizedBox(height: 12),
-                            ],
-                          ],
-                        );
-                      }
-                      return Row(
-                        children: [
-                          for (final card in cards)
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(right: 12),
-                                child: card,
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  GlassButton(
-                    label: _isCameraReady
-                        ? 'Restart Camera'
-                        : 'Start Monitoring',
-                    icon: Icons.play_arrow_rounded,
-                    color: AppColors.safe,
-                    onPressed: _initializeCamera,
-                  ),
+                  if (!_isMonitoring)
+                    GlassButton(
+                      label: _isStartingMonitoring
+                          ? 'Getting Current Location...'
+                          : 'Start Monitoring',
+                      icon: _isStartingMonitoring
+                          ? Icons.sync_rounded
+                          : Icons.play_arrow_rounded,
+                      color: AppColors.safe,
+                      onPressed: _startMonitoring,
+                    )
+                  else
+                    GlassButton(
+                      label: 'Stop Monitoring',
+                      icon: Icons.stop_rounded,
+                      color: AppColors.urgent,
+                      onPressed: _stopMonitoring,
+                    ),
                 ],
               ),
             ),
@@ -270,32 +357,171 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
     );
   }
 
-  _CameraStatus get _cameraStatus {
-    if (_isInitializingCamera) {
-      return const _CameraStatus(
-        label: 'Status: Requesting Camera',
+  _MonitoringStatus get _monitoringStatus {
+    if (_isStartingMonitoring) {
+      return const _MonitoringStatus(
+        label: 'Getting your current location',
         color: AppColors.info,
-        icon: Icons.sync,
+        icon: Icons.my_location_rounded,
+      );
+    }
+    if (_isInitializingCamera) {
+      return const _MonitoringStatus(
+        label: 'Starting camera monitoring',
+        color: AppColors.info,
+        icon: Icons.sync_rounded,
       );
     }
     if (_cameraError != null) {
-      return const _CameraStatus(
-        label: 'Status: Camera Permission Required',
+      return const _MonitoringStatus(
+        label: 'Camera permission required',
         color: AppColors.warning,
         icon: Icons.warning_amber_rounded,
       );
     }
-    if (_isCameraReady) {
-      return const _CameraStatus(
-        label: 'Status: Camera Ready',
+    if (_isMonitoring && _isCameraReady) {
+      return const _MonitoringStatus(
+        label: 'Monitoring active',
         color: AppColors.safe,
-        icon: Icons.check_circle_outline,
+        icon: Icons.check_circle_outline_rounded,
       );
     }
-    return const _CameraStatus(
-      label: 'Status: Waiting for Camera',
+    return const _MonitoringStatus(
+      label: 'Ready to start monitoring',
       color: AppColors.info,
-      icon: Icons.info_outline,
+      icon: Icons.shield_outlined,
+    );
+  }
+}
+
+class _ActiveTripCard extends StatelessWidget {
+  const _ActiveTripCard({required this.start, required this.destination});
+
+  final PlaceResult start;
+  final PlaceResult destination;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Active Trip', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 14),
+          _TripLocationRow(
+            icon: Icons.my_location_rounded,
+            color: AppColors.safe,
+            label: 'Current location',
+            value: start.name,
+          ),
+          const Padding(
+            padding: EdgeInsets.only(left: 10),
+            child: SizedBox(height: 16, child: VerticalDivider(width: 1)),
+          ),
+          _TripLocationRow(
+            icon: Icons.location_on_rounded,
+            color: AppColors.urgent,
+            label: 'Destination',
+            value: destination.name,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TripLocationRow extends StatelessWidget {
+  const _TripLocationRow({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 21),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: Theme.of(context).textTheme.labelSmall),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HiddenCameraPanel extends StatelessWidget {
+  const _HiddenCameraPanel({
+    required this.isMonitoring,
+    required this.isCameraReady,
+    required this.isInitializing,
+    required this.error,
+    required this.onRetry,
+  });
+
+  final bool isMonitoring;
+  final bool isCameraReady;
+  final bool isInitializing;
+  final String? error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final message = isCameraReady
+        ? 'Camera is active. The preview is hidden.'
+        : isInitializing
+        ? 'Initializing the front camera...'
+        : error ?? 'Start monitoring to activate the camera.';
+    return Container(
+      height: 170,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.22),
+        ),
+      ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isCameraReady ? Icons.visibility_off_outlined : Icons.videocam_outlined,
+                size: 40,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 10),
+              Text(message, textAlign: TextAlign.center),
+              if (isMonitoring && error != null) ...[
+                const SizedBox(height: 8),
+                TextButton(onPressed: onRetry, child: const Text('Try Again')),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -318,127 +544,55 @@ class _CameraPreviewPanel extends StatelessWidget {
     final activeController = controller;
     final isReady =
         activeController != null && activeController.value.isInitialized;
-
-    if (isReady) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: ColoredBox(
-          color: Colors.black,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final previewSize = activeController.value.previewSize;
-              final fallbackAspectRatio = activeController.value.aspectRatio;
-              final previewWidth = previewSize?.height ?? constraints.maxWidth;
-              final previewHeight =
-                  previewSize?.width ??
-                  constraints.maxWidth / fallbackAspectRatio;
-
-              return Center(
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: previewWidth,
-                    height: previewHeight,
-                    child: CameraPreview(activeController),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
+    if (!isReady) {
+      return _HiddenCameraPanel(
+        isMonitoring: true,
+        isCameraReady: false,
+        isInitializing: isInitializing,
+        error: error,
+        onRetry: onRetry,
       );
     }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: ColoredBox(
-        color: Colors.black.withValues(alpha: 0.08),
+        color: Colors.black,
         child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              child: isInitializing
-                  ? const _CameraMessage(
-                      key: ValueKey('loading-camera'),
-                      icon: Icons.videocam_outlined,
-                      message: 'Requesting camera access...',
-                      showLoader: true,
-                    )
-                  : error != null
-                  ? _CameraMessage(
-                      key: const ValueKey('camera-error'),
-                      icon: Icons.no_photography_outlined,
-                      message: error!,
-                      actionLabel: 'Try Again',
-                      onAction: onRetry,
-                    )
-                  : _CameraMessage(
-                      key: const ValueKey('camera-idle'),
-                      icon: Icons.videocam_outlined,
-                      message: 'Tap Start Monitoring to open camera',
-                      actionLabel: 'Open Camera',
-                      onAction: onRetry,
-                    ),
-            ),
-          ),
+          child: CameraPreview(activeController),
         ),
       ),
     );
   }
 }
 
-class _CameraMessage extends StatelessWidget {
-  const _CameraMessage({
-    required this.icon,
-    required this.message,
-    super.key,
-    this.showLoader = false,
-    this.actionLabel,
-    this.onAction,
-  });
+class _LiveBadge extends StatelessWidget {
+  const _LiveBadge({required this.visible});
 
-  final IconData icon;
-  final String message;
-  final bool showLoader;
-  final String? actionLabel;
-  final VoidCallback? onAction;
+  final bool visible;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 44, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(height: 10),
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.titleMedium,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.safe.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        visible ? 'PREVIEW' : 'ACTIVE',
+        style: const TextStyle(
+          color: AppColors.safe,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
         ),
-        if (showLoader) ...[
-          const SizedBox(height: 16),
-          const SizedBox(
-            width: 26,
-            height: 26,
-            child: CircularProgressIndicator(strokeWidth: 2.4),
-          ),
-        ],
-        if (actionLabel != null && onAction != null) ...[
-          const SizedBox(height: 12),
-          TextButton.icon(
-            onPressed: onAction,
-            icon: const Icon(Icons.refresh),
-            label: Text(actionLabel!),
-          ),
-        ],
-      ],
+      ),
     );
   }
 }
 
-class _CameraStatus {
-  const _CameraStatus({
+class _MonitoringStatus {
+  const _MonitoringStatus({
     required this.label,
     required this.color,
     required this.icon,
@@ -449,72 +603,8 @@ class _CameraStatus {
   final IconData icon;
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
+class _LocationSetupException implements Exception {
+  const _LocationSetupException(this.message);
 
-  final String label;
-  final String value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.all(18),
-      child: Row(
-        children: [
-          Icon(icon, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Text(value, style: Theme.of(context).textTheme.titleLarge),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DashedBorderPainter extends CustomPainter {
-  const _DashedBorderPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withValues(alpha: 0.45)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    const dashWidth = 10.0;
-    const dashGap = 7.0;
-    final rect = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      const Radius.circular(24),
-    );
-    final path = Path()..addRRect(rect);
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        canvas.drawPath(
-          metric.extractPath(distance, distance + dashWidth),
-          paint,
-        );
-        distance += dashWidth + dashGap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
-      oldDelegate.color != color;
+  final String message;
 }
