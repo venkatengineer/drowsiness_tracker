@@ -169,15 +169,23 @@ class TripScreen extends StatelessWidget {
   }
 }
 
-class _TripCard extends StatelessWidget {
+class _TripCard extends StatefulWidget {
   const _TripCard({required this.trip});
 
   final Trip trip;
 
+  @override
+  State<_TripCard> createState() => _TripCardState();
+}
+
+class _TripCardState extends State<_TripCard>
+    with SingleTickerProviderStateMixin {
+  bool _isExpanded = false;
+
   Color _getScoreColor() {
-    if (trip.drowsinessScore >= 0.30) {
+    if (widget.trip.drowsinessScore >= 0.30) {
       return AppColors.urgent;
-    } else if (trip.drowsinessScore >= 0.15) {
+    } else if (widget.trip.drowsinessScore >= 0.15) {
       return AppColors.warning;
     } else {
       return AppColors.safe;
@@ -185,9 +193,9 @@ class _TripCard extends StatelessWidget {
   }
 
   IconData _getTripIcon() {
-    if (trip.drowsinessScore >= 0.30) {
+    if (widget.trip.drowsinessScore >= 0.30) {
       return Icons.warning_amber_rounded;
-    } else if (trip.drowsinessScore >= 0.15) {
+    } else if (widget.trip.drowsinessScore >= 0.15) {
       return Icons.directions_car_filled_rounded;
     } else {
       return Icons.offline_pin_rounded;
@@ -200,182 +208,314 @@ class _TripCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(28)),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(24),
           onTap: () {
-            Navigator.push(
-              context,
-              PageRouteBuilder(
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    TripDetailsScreen(trip: trip),
-                transitionsBuilder:
-                    (context, animation, secondaryAnimation, child) {
-                      final curved = CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutCubic,
-                        reverseCurve: Curves.easeInCubic,
-                      );
-                      return FadeTransition(
-                        opacity: curved,
-                        child: SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(0.08, 0.03),
-                            end: Offset.zero,
-                          ).animate(curved),
-                          child: child,
-                        ),
-                      );
-                    },
-              ),
-            );
+            setState(() {
+              _isExpanded = !_isExpanded;
+            });
           },
           child: GlassCard(
             padding: const EdgeInsets.all(18),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Icon indicator
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: scoreColor.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Icon(_getTripIcon(), color: scoreColor, size: 26),
-                ),
-                const SizedBox(width: 16),
-                // Details
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              trip.tripName,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: Theme.of(
-                              context,
-                            ).iconTheme.color?.withValues(alpha: 0.5),
-                            size: 24,
-                          ),
-                        ],
+                Row(
+                  children: [
+                    // Icon indicator
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: scoreColor.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(18),
                       ),
-                      const SizedBox(height: 6),
-                      // Date & Duration row
-                      Row(
+                      child: Icon(_getTripIcon(), color: scoreColor, size: 26),
+                    ),
+                    const SizedBox(width: 16),
+                    // Details
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.calendar_today_rounded,
-                            size: 13,
-                            color: Theme.of(context).textTheme.bodyMedium?.color
-                                ?.withValues(alpha: 0.5),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            trip.date,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.color
-                                      ?.withValues(alpha: 0.6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.trip.tripName,
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.bold),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                          ),
-                          const SizedBox(width: 16),
-                          Icon(
-                            Icons.access_time_rounded,
-                            size: 13,
-                            color: Theme.of(context).textTheme.bodyMedium?.color
-                                ?.withValues(alpha: 0.5),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            trip.duration,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.color
-                                      ?.withValues(alpha: 0.6),
-                                ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      // Badges
-                      Row(
-                        children: [
-                          // Status
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.08)
-                                  : Colors.black.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              trip.status,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.8)
-                                        : Colors.black.withValues(alpha: 0.7),
-                                  ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Drowsiness Score
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: scoreColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: scoreColor.withValues(alpha: 0.25),
-                                width: 1,
                               ),
-                            ),
-                            child: Text(
-                              '${(trip.drowsinessScore * 100).toInt()}% Drowsiness',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: scoreColor,
+                              AnimatedRotation(
+                                duration: const Duration(milliseconds: 200),
+                                turns: _isExpanded ? 0.25 : 0,
+                                child: Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: Theme.of(
+                                    context,
+                                  ).iconTheme.color?.withValues(alpha: 0.5),
+                                  size: 24,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          // Date & Duration row
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.calendar_today_rounded,
+                                size: 13,
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.color
+                                    ?.withValues(alpha: 0.5),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                widget.trip.date,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.color
+                                          ?.withValues(alpha: 0.6),
+                                    ),
+                              ),
+                              const SizedBox(width: 16),
+                              Icon(
+                                Icons.access_time_rounded,
+                                size: 13,
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.color
+                                    ?.withValues(alpha: 0.5),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                widget.trip.duration,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.color
+                                          ?.withValues(alpha: 0.6),
+                                    ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          // Badges
+                          Row(
+                            children: [
+                              // Status
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : Colors.black.withValues(alpha: 0.05),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  widget.trip.status,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark
+                                            ? Colors.white.withValues(
+                                                alpha: 0.8,
+                                              )
+                                            : Colors.black.withValues(
+                                                alpha: 0.7,
+                                              ),
+                                      ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Drowsiness Score
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: scoreColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: scoreColor.withValues(alpha: 0.25),
+                                    width: 1,
                                   ),
-                            ),
+                                ),
+                                child: Text(
+                                  '${(widget.trip.drowsinessScore * 100).toInt()}% Drowsiness',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: scoreColor,
+                                      ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+                // Collapsible area showing details
+                AnimatedCrossFade(
+                  firstChild: const SizedBox.shrink(),
+                  secondChild: Padding(
+                    padding: const EdgeInsets.only(top: 16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Divider(height: 1),
+                        const SizedBox(height: 14),
+                        // Quick Stats Grid
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _QuickStat(
+                              icon: Icons.sentiment_dissatisfied_outlined,
+                              label: 'Yawns',
+                              value: widget.trip.yawns.toString(),
+                              color: AppColors.warning,
+                            ),
+                            _QuickStat(
+                              icon: Icons.visibility_off_outlined,
+                              label: 'Closures',
+                              value: widget.trip.prolongedClosures.toString(),
+                              color: AppColors.urgent,
+                            ),
+                            _QuickStat(
+                              icon: Icons.add_alert_rounded,
+                              label: 'Alerts',
+                              value: widget.trip.drowsinessAlerts.toString(),
+                              color: AppColors.urgent,
+                            ),
+                            _QuickStat(
+                              icon: Icons.security_rounded,
+                              label: 'Safety',
+                              value:
+                                  '${(widget.trip.alertnessScore * 100).toInt()}%',
+                              color: AppColors.safe,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        // View Full Analytics Button
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              PageRouteBuilder(
+                                pageBuilder:
+                                    (context, animation, secondaryAnimation) =>
+                                        TripDetailsScreen(trip: widget.trip),
+                                transitionsBuilder:
+                                    (
+                                      context,
+                                      animation,
+                                      secondaryAnimation,
+                                      child,
+                                    ) {
+                                      final curved = CurvedAnimation(
+                                        parent: animation,
+                                        curve: Curves.easeOutCubic,
+                                        reverseCurve: Curves.easeInCubic,
+                                      );
+                                      return FadeTransition(
+                                        opacity: curved,
+                                        child: SlideTransition(
+                                          position: Tween<Offset>(
+                                            begin: const Offset(0.08, 0.03),
+                                            end: Offset.zero,
+                                          ).animate(curved),
+                                          child: child,
+                                        ),
+                                      );
+                                    },
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.analytics_rounded, size: 18),
+                          label: const Text(
+                            'View Detailed Report',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                  crossFadeState: _isExpanded
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 250),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _QuickStat extends StatelessWidget {
+  const _QuickStat({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(
+              context,
+            ).textTheme.bodySmall?.color?.withValues(alpha: 0.6),
+          ),
+        ),
+      ],
     );
   }
 }

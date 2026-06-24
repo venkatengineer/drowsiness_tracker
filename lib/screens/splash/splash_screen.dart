@@ -9,7 +9,8 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with TickerProviderStateMixin {
   late final AnimationController _logoController;
   late final AnimationController _pulseController;
   late final AnimationController _progressController;
@@ -30,10 +31,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     );
 
     _logoScale = Tween<double>(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _logoController,
-        curve: Curves.easeOutBack,
-      ),
+      CurvedAnimation(parent: _logoController, curve: Curves.easeOutBack),
     );
 
     _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -50,17 +48,11 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     );
 
     _pulseScale = Tween<double>(begin: 0.9, end: 1.25).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
     _pulseOpacity = Tween<double>(begin: 0.1, end: 0.35).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
     // 3. Progress Animation (determinate loading bar)
@@ -125,12 +117,16 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                                 color: AppColors.info.withValues(alpha: 0.4),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.info.withValues(alpha: 0.6),
+                                    color: AppColors.info.withValues(
+                                      alpha: 0.6,
+                                    ),
                                     blurRadius: 45,
                                     spreadRadius: 10,
                                   ),
                                   BoxShadow(
-                                    color: AppColors.safe.withValues(alpha: 0.4),
+                                    color: AppColors.safe.withValues(
+                                      alpha: 0.4,
+                                    ),
                                     blurRadius: 30,
                                     spreadRadius: 5,
                                   ),
@@ -172,7 +168,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                       child: Column(
                         children: [
                           const Text(
-                            'DRIVER ASSIST',
+                            'NG-DAS',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 24,

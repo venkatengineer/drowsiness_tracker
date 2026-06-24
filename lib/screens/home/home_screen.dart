@@ -26,7 +26,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       extendBody: true,
       appBar: AppBar(
-        title: const Text('Driver Assist'),
+        title: const Text('NG-DAS'),
         actions: [
           Tooltip(
             message: 'Profile',

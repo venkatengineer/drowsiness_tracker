@@ -112,8 +112,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 18),
-                       Text(
-                        'Driver Assist',
+                      Text(
+                        'NG-DAS',
                         style: Theme.of(context).textTheme.headlineMedium,
                         textAlign: TextAlign.center,
                       ),

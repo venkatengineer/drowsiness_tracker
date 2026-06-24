@@ -112,9 +112,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       );
     } on OpenMapsApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
       if (mounted) setState(() => _isResolvingPoint = false);
     }
@@ -126,7 +126,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       final points = [
         if (_startPlace case final place?)
           LatLng(place.latitude, place.longitude),
-        if (_endPlace case final place?) LatLng(place.latitude, place.longitude),
+        if (_endPlace case final place?)
+          LatLng(place.latitude, place.longitude),
       ];
       if (points.isEmpty) return;
       if (points.length == 1) {
@@ -147,7 +148,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     final end = _endPlace;
     if (start == null || end == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select both a starting point and destination.')),
+        const SnackBar(
+          content: Text('Select both a starting point and destination.'),
+        ),
       );
       return;
     }
@@ -169,9 +172,9 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       Navigator.of(context).pop(end);
     } on TripApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -319,7 +322,11 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white, width: 3),
           boxShadow: const [
-            BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5)),
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 10,
+              offset: Offset(0, 5),
+            ),
           ],
         ),
         child: Icon(icon, color: Colors.white, size: 25),
@@ -389,7 +396,9 @@ class _LocationCard extends StatelessWidget {
             tooltip: 'Swap locations',
             onPressed: lockStartLocation ? null : onSwap,
             icon: Icon(
-              lockStartLocation ? Icons.my_location_rounded : Icons.swap_vert_rounded,
+              lockStartLocation
+                  ? Icons.my_location_rounded
+                  : Icons.swap_vert_rounded,
             ),
           ),
         ],
@@ -419,7 +428,9 @@ class _LocationField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = selected ? color : Theme.of(context).colorScheme.outlineVariant;
+    final borderColor = selected
+        ? color
+        : Theme.of(context).colorScheme.outlineVariant;
     return Material(
       color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.72),
       borderRadius: BorderRadius.circular(16),
@@ -438,7 +449,9 @@ class _LocationField extends StatelessWidget {
               GestureDetector(
                 onTap: onMapSelectionTap,
                 child: Icon(
-                  label == 'From' ? Icons.trip_origin_rounded : Icons.location_on_rounded,
+                  label == 'From'
+                      ? Icons.trip_origin_rounded
+                      : Icons.location_on_rounded,
                   color: color,
                   size: 21,
                 ),
@@ -464,7 +477,10 @@ class _LocationField extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(locked ? Icons.lock_rounded : Icons.search_rounded, size: 20),
+              Icon(
+                locked ? Icons.lock_rounded : Icons.search_rounded,
+                size: 20,
+              ),
             ],
           ),
         ),
@@ -498,16 +514,20 @@ class _BottomActionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.touch_app_rounded, color: AppColors.info, size: 20),
+              const Icon(
+                Icons.touch_app_rounded,
+                color: AppColors.info,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   hasRoute
                       ? 'Route ready. Review the pins and create your trip.'
                       : 'Choose a field, then search or tap anywhere on the map.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -655,7 +675,10 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                 itemBuilder: (context, index) {
                   final result = _results[index];
                   return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 5,
+                    ),
                     leading: const CircleAvatar(
                       child: Icon(Icons.location_on_outlined),
                     ),

@@ -25,10 +25,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _logout() {
     _authApi.logout();
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoutes.login,
-      (route) => false,
-    );
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
   }
 
   @override
@@ -36,17 +35,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-      ),
+      appBar: AppBar(title: const Text('Profile')),
       body: SafeArea(
         child: FutureBuilder<Map<String, dynamic>>(
           future: _userDetailsFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(),
-              );
+              return const Center(child: CircularProgressIndicator());
             }
 
             if (snapshot.hasError) {
@@ -70,7 +65,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Text(
                         snapshot.error.toString(),
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: isDark ? AppColors.darkSecondaryText : AppColors.lightSecondaryText,
+                          color: isDark
+                              ? AppColors.darkSecondaryText
+                              : AppColors.lightSecondaryText,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -94,27 +91,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
             final username = user['username'] ?? 'User';
             final email = user['email'] ?? 'Not provided';
             final phone = user['phone_number'] ?? 'Not provided';
-            final createdAt = user['created_at'] != null 
-                ? user['created_at'].toString().split(' ')[0] 
+            final createdAt = user['created_at'] != null
+                ? user['created_at'].toString().split(' ')[0]
                 : 'Unknown';
 
             final fullName = user['full_name'] ?? 'Not completed setup';
-            final age = user['age'] != null ? user['age'].toString() : 'Not completed setup';
+            final age = user['age'] != null
+                ? user['age'].toString()
+                : 'Not completed setup';
             final gender = user['gender'] ?? 'Not completed setup';
-            final vehicleNumber = user['vehicle_number'] ?? 'Not completed setup';
+            final vehicleNumber =
+                user['vehicle_number'] ?? 'Not completed setup';
             final vehicleType = user['vehicle_type'] ?? 'Not completed setup';
-            final emergencyContactName = user['emergency_contact_name'] ?? 'Not completed setup';
-            final emergencyContactNumber = user['emergency_contact_number'] ?? 'Not completed setup';
-            final averageDrivingHours = user['average_daily_driving_hours'] != null 
-                ? '${user['average_daily_driving_hours']} hours/day' 
+            final emergencyContactName =
+                user['emergency_contact_name'] ?? 'Not completed setup';
+            final emergencyContactNumber =
+                user['emergency_contact_number'] ?? 'Not completed setup';
+            final averageDrivingHours =
+                user['average_daily_driving_hours'] != null
+                ? '${user['average_daily_driving_hours']} hours/day'
                 : 'Not completed setup';
 
-            final avatarInitial = fullName != 'Not completed setup' && fullName.isNotEmpty
+            final avatarInitial =
+                fullName != 'Not completed setup' && fullName.isNotEmpty
                 ? fullName[0].toUpperCase()
                 : (username.isNotEmpty ? username[0].toUpperCase() : 'U');
 
             return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 16.0,
+              ),
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 540),
@@ -152,9 +159,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 16),
                       Text(
                         fullName != 'Not completed setup' ? fullName : username,
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 28),
 
@@ -165,9 +171,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           children: [
                             Text(
                               'Profile Information',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                             ),
                             const Divider(height: 24, thickness: 1),
                             _buildInfoRow(
@@ -230,9 +235,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           children: [
                             Text(
                               'Vehicle Information',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                             ),
                             const Divider(height: 24, thickness: 1),
                             _buildInfoRow(
@@ -267,9 +271,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           children: [
                             Text(
                               'Emergency Contacts',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                             ),
                             const Divider(height: 24, thickness: 1),
                             _buildInfoRow(
@@ -315,18 +318,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String value,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final secondaryColor = isDark 
-        ? AppColors.darkSecondaryText 
+    final secondaryColor = isDark
+        ? AppColors.darkSecondaryText
         : AppColors.lightSecondaryText;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          icon,
-          size: 22,
-          color: secondaryColor,
-        ),
+        Icon(icon, size: 22, color: secondaryColor),
         const SizedBox(width: 14),
         Expanded(
           child: Column(
@@ -334,10 +333,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: secondaryColor,
-                ),
+                style: TextStyle(fontSize: 12, color: secondaryColor),
               ),
               const SizedBox(height: 3),
               Text(

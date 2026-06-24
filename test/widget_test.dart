@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('shows Driver Assist login screen', (tester) async {
+  testWidgets('shows NG-DAS login screen', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
@@ -16,7 +16,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Driver Assist'), findsOneWidget);
+    expect(find.text('NG-DAS'), findsOneWidget);
     expect(find.text('Login'), findsOneWidget);
   });
 }

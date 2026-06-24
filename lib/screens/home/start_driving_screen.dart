@@ -1,32 +1,47 @@
+import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/providers/dms_providers.dart';
+import '../../core/providers/trip_provider.dart';
 import '../../core/services/open_maps_api.dart';
+import '../../widgets/dms/camera_calibration_view.dart';
+import '../../widgets/dms/safety_score_card.dart';
+import '../../widgets/dms/driver_status_card.dart';
+import '../../widgets/dms/fatigue_gauge.dart';
+import '../../widgets/dms/ai_safety_assistant_card.dart';
+import '../../widgets/dms/trip_info_card.dart';
+import '../../widgets/dms/event_statistics_card.dart';
+import '../../widgets/dms/timeline_card.dart';
+import '../../widgets/dms/break_recommendation_card.dart';
+import '../../widgets/dms/trip_control_panel.dart';
+import '../../widgets/dms/trip_summary_view.dart';
 import '../../widgets/glass_button.dart';
 import '../../widgets/glass_card.dart';
 import 'create_trip_screen.dart';
 
-class StartDrivingScreen extends StatefulWidget {
+class StartDrivingScreen extends ConsumerStatefulWidget {
   const StartDrivingScreen({super.key});
 
   @override
-  State<StartDrivingScreen> createState() => _StartDrivingScreenState();
+  ConsumerState<StartDrivingScreen> createState() => _StartDrivingScreenState();
 }
 
-class _StartDrivingScreenState extends State<StartDrivingScreen>
+class _StartDrivingScreenState extends ConsumerState<StartDrivingScreen>
     with WidgetsBindingObserver {
   CameraController? _cameraController;
-  PlaceResult? _startPlace;
-  PlaceResult? _destination;
   bool _isInitializingCamera = false;
   bool _isStartingMonitoring = false;
-  bool _isMonitoring = false;
-  bool _showCameraPreview = false;
+  bool _showCameraPreview = true;
   String? _cameraError;
+  bool _isMapReady = false;
+
+  // Flutter Map Controller
   final _mapController = MapController();
 
   bool get _isCameraReady =>
@@ -43,10 +58,15 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
     final controller = _cameraController;
     if (controller == null || !controller.value.isInitialized) return;
 
-    if (state == AppLifecycleState.inactive) {
+    final tripState = ref.read(tripProvider);
+
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
       controller.dispose();
       _cameraController = null;
-    } else if (state == AppLifecycleState.resumed && _isMonitoring) {
+    } else if (state == AppLifecycleState.resumed &&
+        (tripState.status == TripStatus.active ||
+            tripState.status == TripStatus.calibrating)) {
       _initializeCamera();
     }
   }
@@ -60,7 +80,7 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
   }
 
   Future<void> _startMonitoring() async {
-    if (_isStartingMonitoring || _isMonitoring) return;
+    if (_isStartingMonitoring) return;
     setState(() => _isStartingMonitoring = true);
 
     try {
@@ -77,61 +97,88 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
       );
       if (destination == null || !mounted) return;
 
-      setState(() {
-        _startPlace = start;
-        _destination = destination;
-        _isMonitoring = true;
-        _showCameraPreview = false;
-      });
-      _focusSelectedPlaces();
+      ref.read(tripProvider.notifier).enterCalibration(start, destination);
+
+      // Trigger route retrieval asynchronously
+      _fetchRoute(start, destination);
+
       await _initializeCamera();
     } on _LocationSetupException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
       if (mounted) setState(() => _isStartingMonitoring = false);
     }
   }
 
-  void _focusSelectedPlaces() {
-    final start = _startPlace;
-    final end = _destination;
-    if (start == null || end == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+  Future<void> _fetchRoute(PlaceResult start, PlaceResult end) async {
+    final mapsApi = OpenMapsApi();
+    try {
+      final routePlaceResults = await mapsApi.fetchRoutePoints(
+        startLatitude: start.latitude,
+        startLongitude: start.longitude,
+        endLatitude: end.latitude,
+        endLongitude: end.longitude,
+      );
+
       if (!mounted) return;
-      final points = [
+
+      final points = routePlaceResults
+          .map((p) => LatLng(p.latitude, p.longitude))
+          .toList();
+      ref.read(tripProvider.notifier).setRoutePoints(points);
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _focusSelectedPlaces(start, end, points);
+        }
+      });
+    } catch (e) {
+      debugPrint('OSRM routing error: $e');
+      if (!mounted) return;
+      final fallbackPoints = [
         LatLng(start.latitude, start.longitude),
         LatLng(end.latitude, end.longitude),
       ];
-      _mapController.fitCamera(
-        CameraFit.bounds(
-          bounds: LatLngBounds.fromPoints(points),
-          padding: const EdgeInsets.fromLTRB(60, 190, 60, 260),
-        ),
-      );
-    });
+      ref.read(tripProvider.notifier).setRoutePoints(fallbackPoints);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _focusSelectedPlaces(start, end, fallbackPoints);
+        }
+      });
+    } finally {
+      mapsApi.close();
+    }
   }
 
-  Widget _mapMarker({
-    required Color color,
-    required IconData icon,
-  }) {
+  void _focusSelectedPlaces(
+    PlaceResult start,
+    PlaceResult end,
+    List<LatLng> points,
+  ) {
+    if (points.isEmpty) return;
+    if (!_isMapReady) return;
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints(points),
+        padding: const EdgeInsets.all(24),
+      ),
+    );
+  }
+
+  Widget _mapMarker({required Color color, required IconData icon}) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2.5),
+        border: Border.all(color: Colors.white, width: 2.0),
         boxShadow: const [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
+          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
         ],
       ),
-      child: Icon(icon, color: Colors.white, size: 20),
+      child: Icon(icon, color: Colors.white, size: 14),
     );
   }
 
@@ -234,16 +281,101 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
   }
 
   Future<void> _stopMonitoring() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: GlassCard(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.stop_circle_outlined,
+                      color: AppColors.urgent,
+                      size: 28,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'End Trip',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Are you sure you want to end this trip monitoring session?\n\nThis will generate a final analytics summary.',
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.urgent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('End Trip'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    ref.read(tripProvider.notifier).stopTrip();
+  }
+
+  void _finishStopMonitoring() async {
     await _cameraController?.dispose();
     if (!mounted) return;
     setState(() {
       _cameraController = null;
-      _isMonitoring = false;
+      _isMapReady = false;
       _showCameraPreview = false;
-      _cameraError = null;
-      _startPlace = null;
-      _destination = null;
     });
+    ref.read(tripProvider.notifier).reset();
+    ref.read(safetyScoreProvider.notifier).state = 100;
+    ref.read(driverStatusProvider.notifier).state = DriverStatusState();
+    ref.read(fatigueLevelProvider.notifier).state = 'Low';
+    ref.read(eventStatisticsProvider.notifier).state = EventStatisticsState();
+    ref.read(breakRecommendationProvider.notifier).state =
+        'Driver appears alert.';
+    ref.read(timelineEventsProvider.notifier).reset();
+  }
+
+  String _formatDuration(int seconds) {
+    final hours = seconds ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
+    final secs = seconds % 60;
+
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
   String _cameraMessageFor(CameraException error) {
@@ -258,216 +390,505 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (_isMonitoring) {
-      final startPoint = LatLng(_startPlace!.latitude, _startPlace!.longitude);
-      final endPoint = LatLng(_destination!.latitude, _destination!.longitude);
+    final tripState = ref.watch(tripProvider);
+    ref.watch(
+      dmsSimulationProvider,
+    ); // Auto-starts / stops simulation based on status!
+
+    // Camera Calibration Screen
+    if (tripState.status == TripStatus.calibrating) {
+      return CameraCalibrationView(
+        cameraController: _cameraController,
+        isInitializing: _isInitializingCamera,
+        error: _cameraError,
+        onRetryCamera: _initializeCamera,
+        onStartTrip: () {
+          setState(() {
+            _showCameraPreview = false;
+          });
+          ref.read(tripProvider.notifier).startTrip();
+        },
+      );
+    }
+
+    // Trip Summary Screen
+    if (tripState.status == TripStatus.completed) {
+      final safetyScore = ref.watch(safetyScoreProvider);
+      final driverStatus = ref.watch(driverStatusProvider);
+      final eventStats = ref.watch(eventStatisticsProvider);
+
+      return TripSummaryView(
+        startPlace: tripState.startPlace?.name ?? 'Current Location',
+        destination: tripState.destination?.name ?? 'Destination',
+        durationSeconds: tripState.durationSeconds,
+        breakDurationSeconds: tripState.breakDurationSeconds,
+        safetyScore: safetyScore,
+        alertCount: eventStats.totalAlerts,
+        eyeClosureCount: eventStats.eyeClosures,
+        yawnCount: eventStats.yawns,
+        neckDropCount: eventStats.neckDroops,
+        driverStatusText:
+            '${driverStatus.eyes} | ${driverStatus.mouth} | ${driverStatus.neck}',
+        onDone: _finishStopMonitoring,
+      );
+    }
+
+    if (tripState.status == TripStatus.active ||
+        tripState.status == TripStatus.paused) {
+      final startPoint = tripState.startPlace != null
+          ? LatLng(
+              tripState.startPlace!.latitude,
+              tripState.startPlace!.longitude,
+            )
+          : const LatLng(0, 0);
+      final endPoint = tripState.destination != null
+          ? LatLng(
+              tripState.destination!.latitude,
+              tripState.destination!.longitude,
+            )
+          : const LatLng(0, 0);
+
+      // Watch DMS States
+      final safetyScore = ref.watch(safetyScoreProvider);
+      final driverStatus = ref.watch(driverStatusProvider);
+      final fatigueLevel = ref.watch(fatigueLevelProvider);
+      final eventStats = ref.watch(eventStatisticsProvider);
+      final recommendation = ref.watch(breakRecommendationProvider);
+      final timelineEvents = ref.watch(timelineEventsProvider);
 
       return Scaffold(
+        backgroundColor: Colors.black,
         body: Stack(
           children: [
-            // Map
-            Positioned.fill(
-              child: FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: startPoint,
-                  initialZoom: 10,
-                  minZoom: 3,
-                  maxZoom: 19,
-                ),
+            SafeArea(
+              bottom: false,
+              child: Column(
                 children: [
-                  TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.example.driver_assist',
-                    maxZoom: 19,
-                  ),
-                  PolylineLayer(
-                    polylines: [
-                      Polyline(
-                        points: [startPoint, endPoint],
-                        color: AppColors.info,
-                        strokeWidth: 5,
+                  // 1. TOP STATUS SECTION (Compact Card)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 8.0,
+                    ),
+                    child: GlassCard(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
                       ),
-                    ],
-                  ),
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: startPoint,
-                        width: 44,
-                        height: 44,
-                        child: _mapMarker(
-                          color: AppColors.safe,
-                          icon: Icons.trip_origin_rounded,
-                        ),
+                      borderRadius: 16,
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.safe.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppColors.safe,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.circle,
+                                  color: AppColors.safe,
+                                  size: 8,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'TRIP ACTIVE',
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.safe,
+                                        letterSpacing: 1.0,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Destination',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Colors.white60,
+                                        fontSize: 10,
+                                      ),
+                                ),
+                                Text(
+                                  tripState.destination?.name ?? 'Coimbatore',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Colors.white,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Right Info: Time & Duration
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                _formatDuration(tripState.durationSeconds),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                              const Text(
+                                'Elapsed',
+                                style: TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 8),
+                          PopupMenuButton<String>(
+                            icon: const Icon(
+                              Icons.more_vert_rounded,
+                              color: Colors.white70,
+                            ),
+                            tooltip: 'Trip Menu',
+                            onSelected: (value) {
+                              if (value == 'preview_camera') {
+                                setState(() {
+                                  _showCameraPreview = !_showCameraPreview;
+                                });
+                              } else if (value == 'end_trip') {
+                                _stopMonitoring();
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                value: 'preview_camera',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      _showCameraPreview
+                                          ? Icons.videocam_off_outlined
+                                          : Icons.videocam_outlined,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      _showCameraPreview
+                                          ? 'Hide Camera'
+                                          : 'Preview Camera',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'end_trip',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.stop_circle_outlined,
+                                      color: AppColors.urgent,
+                                      size: 20,
+                                    ),
+                                    SizedBox(width: 8),
+                                    Text('End Trip'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      Marker(
-                        point: endPoint,
-                        width: 44,
-                        height: 44,
-                        child: _mapMarker(
-                          color: AppColors.urgent,
-                          icon: Icons.location_on_rounded,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                  const RichAttributionWidget(
-                    attributions: [
-                      TextSourceAttribution('OpenStreetMap contributors'),
-                    ],
+
+                  // 2. SCROLLABLE ADAS MONITORING DASHBOARD CONTENT
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 110),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Side-by-side: Safety Score & Fatigue Gauge
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: SafetyScoreCard(score: safetyScore),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: FatigueGauge(level: fatigueLevel),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Driver Status (Eyes, Mouth, Neck alignment checks)
+                          DriverStatusCard(
+                            status: driverStatus.status,
+                            eyes: driverStatus.eyes,
+                            mouth: driverStatus.mouth,
+                            neck: driverStatus.neck,
+                          ),
+                          const SizedBox(height: 14),
+
+                          // AI Safety Assistant Card
+                          AISafetyAssistantCard(recommendation: recommendation),
+                          const SizedBox(height: 14),
+
+                          // Trip Information Card
+                          TripInfoCard(
+                            destination:
+                                tripState.destination?.name ?? 'Destination',
+                            durationSeconds: tripState.durationSeconds,
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Event Statistics Card
+                          EventStatisticsCard(
+                            eyeClosures: eventStats.eyeClosures,
+                            yawns: eventStats.yawns,
+                            neckDroops: eventStats.neckDroops,
+                            alerts: eventStats.totalAlerts,
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Break Recommendation Card
+                          BreakRecommendationCard(
+                            driveTimeSeconds: tripState.durationSeconds,
+                            riskLevel: fatigueLevel,
+                          ),
+                          const SizedBox(height: 14),
+
+                          // Chronological Event Timeline Log
+                          TimelineCard(events: timelineEvents),
+                          const SizedBox(height: 14),
+
+                          // 20-25% Height Contextual Mini Map
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              return Container(
+                                height: 170,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.12),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Stack(
+                                    children: [
+                                      FlutterMap(
+                                        mapController: _mapController,
+                                        options: MapOptions(
+                                          initialCenter: startPoint,
+                                          initialZoom: 10,
+                                          minZoom: 3,
+                                          maxZoom: 19,
+                                          onMapReady: () {
+                                            setState(() {
+                                              _isMapReady = true;
+                                            });
+                                            if (tripState
+                                                    .routePoints
+                                                    .isNotEmpty &&
+                                                tripState.startPlace != null &&
+                                                tripState.destination != null) {
+                                              _focusSelectedPlaces(
+                                                tripState.startPlace!,
+                                                tripState.destination!,
+                                                tripState.routePoints,
+                                              );
+                                            }
+                                          },
+                                          interactionOptions:
+                                              const InteractionOptions(
+                                                flags:
+                                                    InteractiveFlag.all &
+                                                    ~InteractiveFlag.rotate,
+                                              ),
+                                        ),
+                                        children: [
+                                          TileLayer(
+                                            urlTemplate:
+                                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                            userAgentPackageName:
+                                                'com.example.driver_assist',
+                                            maxZoom: 19,
+                                            tileBuilder:
+                                                (context, tileWidget, tile) {
+                                                  return ColorFiltered(
+                                                    colorFilter:
+                                                        const ColorFilter.matrix(
+                                                          [
+                                                            -0.2126,
+                                                            -0.7152,
+                                                            -0.0722,
+                                                            0,
+                                                            255, // Red
+                                                            -0.2126,
+                                                            -0.7152,
+                                                            -0.0722,
+                                                            0,
+                                                            255, // Green
+                                                            -0.2126,
+                                                            -0.7152,
+                                                            -0.0722,
+                                                            0,
+                                                            255, // Blue
+                                                            0,
+                                                            0,
+                                                            0,
+                                                            1,
+                                                            0, // Alpha
+                                                          ],
+                                                        ),
+                                                    child: tileWidget,
+                                                  );
+                                                },
+                                          ),
+                                          if (tripState.routePoints.isNotEmpty)
+                                            PolylineLayer(
+                                              polylines: [
+                                                Polyline(
+                                                  points: tripState.routePoints,
+                                                  color: AppColors.info,
+                                                  strokeWidth: 4,
+                                                ),
+                                              ],
+                                            ),
+                                          MarkerLayer(
+                                            markers: [
+                                              Marker(
+                                                point: startPoint,
+                                                width: 24,
+                                                height: 24,
+                                                child: _mapMarker(
+                                                  color: AppColors.safe,
+                                                  icon:
+                                                      Icons.trip_origin_rounded,
+                                                ),
+                                              ),
+                                              Marker(
+                                                point: endPoint,
+                                                width: 24,
+                                                height: 24,
+                                                child: _mapMarker(
+                                                  color: AppColors.urgent,
+                                                  icon:
+                                                      Icons.location_on_rounded,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                      // Mini map content HUD
+                                      Positioned(
+                                        bottom: 10,
+                                        left: 10,
+                                        right: 10,
+                                        child: GlassCard(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          borderRadius: 12,
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  const Icon(
+                                                    Icons.navigation,
+                                                    size: 14,
+                                                    color: AppColors.info,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    'Remaining: 34 km',
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .bodySmall
+                                                        ?.copyWith(
+                                                          color: Colors.white70,
+                                                          fontSize: 11,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                              Text(
+                                                'ETA: 10:45 AM',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.copyWith(
+                                                      color: Colors.white70,
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
 
-            // Top Floating Header: Navigation Card
+            // 3. FIXED BOTTOM ACTION BAR
             Positioned(
-              top: MediaQuery.paddingOf(context).top + 12,
-              left: 16,
-              right: 16,
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 620),
-                  child: GlassCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                    borderRadius: 20,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppColors.safe.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: const Icon(
-                            Icons.navigation_rounded,
-                            color: AppColors.safe,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Navigating to destination',
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                      color: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall
-                                          ?.color
-                                          ?.withValues(alpha: 0.6),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _destination!.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: TripControlPanel(onEndTrip: _stopMonitoring),
             ),
 
-            // Picture-in-Picture (PIP) Camera Preview Panel OR Floating Preview Button
-            if (_showCameraPreview)
+            // 4. FLOATING CAMERA PREVIEW OVERLAY
+            if (_showCameraPreview && _isCameraReady)
               Positioned(
-                bottom: 110,
+                bottom: 120,
                 right: 16,
-                child: SizedBox(
-                  width: 150,
-                  height: 200,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: GlassCard(
-                          padding: EdgeInsets.zero,
-                          borderRadius: 20,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: _CameraPreviewPanel(
-                              controller: _cameraController,
-                              isInitializing: _isInitializingCamera,
-                              error: _cameraError,
-                              onRetry: _initializeCamera,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 6,
-                        right: 6,
-                        child: IconButton.filled(
-                          iconSize: 16,
-                          constraints: const BoxConstraints(
-                            minWidth: 28,
-                            minHeight: 28,
-                          ),
-                          padding: EdgeInsets.zero,
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.black54,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: () => setState(() => _showCameraPreview = false),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Positioned(
-                bottom: 110,
-                right: 16,
-                child: FloatingActionButton.extended(
-                  heroTag: 'preview_camera_fab',
-                  backgroundColor: AppColors.info,
-                  foregroundColor: Colors.white,
-                  elevation: 6,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  onPressed: () => setState(() => _showCameraPreview = true),
-                  icon: const Icon(Icons.videocam_outlined),
-                  label: const Text('Preview Camera'),
+                child: _FloatingCameraPreview(
+                  controller: _cameraController!,
+                  onClose: () {
+                    setState(() {
+                      _showCameraPreview = false;
+                    });
+                  },
                 ),
               ),
-
-            // Floating Bottom Stop Button
-            Positioned(
-              bottom: MediaQuery.paddingOf(context).bottom + 16,
-              left: 16,
-              right: 16,
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 620),
-                  child: GlassCard(
-                    padding: const EdgeInsets.all(12),
-                    borderRadius: 24,
-                    child: GlassButton(
-                      label: 'Stop Monitoring',
-                      icon: Icons.stop_rounded,
-                      color: AppColors.urgent,
-                      onPressed: _stopMonitoring,
-                    ),
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
       );
@@ -494,11 +915,9 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
                   Text(
                     'Set your destination and monitor driver alertness.',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context)
-                          .textTheme
-                          .bodyLarge
-                          ?.color
-                          ?.withValues(alpha: 0.68),
+                      color: Theme.of(
+                        context,
+                      ).textTheme.bodyLarge?.color?.withValues(alpha: 0.68),
                     ),
                   ),
                   const SizedBox(height: 22),
@@ -525,13 +944,6 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
                       ],
                     ),
                   ),
-                  if (_isMonitoring) ...[
-                    const SizedBox(height: 18),
-                    _ActiveTripCard(
-                      start: _startPlace!,
-                      destination: _destination!,
-                    ),
-                  ],
                   const SizedBox(height: 18),
                   GlassCard(
                     child: Column(
@@ -562,13 +974,13 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
                           )
                         else
                           _HiddenCameraPanel(
-                            isMonitoring: _isMonitoring,
+                            isMonitoring: false,
                             isCameraReady: _isCameraReady,
                             isInitializing: _isInitializingCamera,
                             error: _cameraError,
                             onRetry: _initializeCamera,
                           ),
-                        if (_isMonitoring && _isCameraReady) ...[
+                        if (_isCameraReady) ...[
                           const SizedBox(height: 14),
                           OutlinedButton.icon(
                             onPressed: () => setState(
@@ -590,24 +1002,16 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
                     ),
                   ),
                   const SizedBox(height: 18),
-                  if (!_isMonitoring)
-                    GlassButton(
-                      label: _isStartingMonitoring
-                          ? 'Getting Current Location...'
-                          : 'Start Monitoring',
-                      icon: _isStartingMonitoring
-                          ? Icons.sync_rounded
-                          : Icons.play_arrow_rounded,
-                      color: AppColors.safe,
-                      onPressed: _startMonitoring,
-                    )
-                  else
-                    GlassButton(
-                      label: 'Stop Monitoring',
-                      icon: Icons.stop_rounded,
-                      color: AppColors.urgent,
-                      onPressed: _stopMonitoring,
-                    ),
+                  GlassButton(
+                    label: _isStartingMonitoring
+                        ? 'Getting Current Location...'
+                        : 'Start Monitoring',
+                    icon: _isStartingMonitoring
+                        ? Icons.sync_rounded
+                        : Icons.play_arrow_rounded,
+                    color: AppColors.safe,
+                    onPressed: _startMonitoring,
+                  ),
                 ],
               ),
             ),
@@ -639,93 +1043,10 @@ class _StartDrivingScreenState extends State<StartDrivingScreen>
         icon: Icons.warning_amber_rounded,
       );
     }
-    if (_isMonitoring && _isCameraReady) {
-      return const _MonitoringStatus(
-        label: 'Monitoring active',
-        color: AppColors.safe,
-        icon: Icons.check_circle_outline_rounded,
-      );
-    }
     return const _MonitoringStatus(
       label: 'Ready to start monitoring',
       color: AppColors.info,
       icon: Icons.shield_outlined,
-    );
-  }
-}
-
-class _ActiveTripCard extends StatelessWidget {
-  const _ActiveTripCard({required this.start, required this.destination});
-
-  final PlaceResult start;
-  final PlaceResult destination;
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Active Trip', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 14),
-          _TripLocationRow(
-            icon: Icons.my_location_rounded,
-            color: AppColors.safe,
-            label: 'Current location',
-            value: start.name,
-          ),
-          const Padding(
-            padding: EdgeInsets.only(left: 10),
-            child: SizedBox(height: 16, child: VerticalDivider(width: 1)),
-          ),
-          _TripLocationRow(
-            icon: Icons.location_on_rounded,
-            color: AppColors.urgent,
-            label: 'Destination',
-            value: destination.name,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TripLocationRow extends StatelessWidget {
-  const _TripLocationRow({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: color, size: 21),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.labelSmall),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
@@ -768,7 +1089,9 @@ class _HiddenCameraPanel extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                isCameraReady ? Icons.visibility_off_outlined : Icons.videocam_outlined,
+                isCameraReady
+                    ? Icons.visibility_off_outlined
+                    : Icons.videocam_outlined,
                 size: 40,
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -818,9 +1141,7 @@ class _CameraPreviewPanel extends StatelessWidget {
       borderRadius: BorderRadius.circular(20),
       child: ColoredBox(
         color: Colors.black,
-        child: Center(
-          child: CameraPreview(activeController),
-        ),
+        child: Center(child: CameraPreview(activeController)),
       ),
     );
   }
@@ -867,4 +1188,89 @@ class _LocationSetupException implements Exception {
   const _LocationSetupException(this.message);
 
   final String message;
+}
+
+class _FloatingCameraPreview extends StatelessWidget {
+  const _FloatingCameraPreview({
+    required this.controller,
+    required this.onClose,
+  });
+
+  final CameraController controller;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 110,
+      height: 147, // 3:4 aspect ratio
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.2),
+          width: 2,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black54,
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Stack(
+          children: [
+            Positioned.fill(child: CameraPreview(controller)),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: GestureDetector(
+                onTap: onClose,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    size: 14,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 4,
+              left: 6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.safe.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.circle, color: Colors.white, size: 6),
+                    SizedBox(width: 4),
+                    Text(
+                      'LIVE',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

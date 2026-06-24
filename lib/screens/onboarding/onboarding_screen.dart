@@ -69,39 +69,52 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     String error = '';
     switch (_currentStep) {
       case 0:
-        if (_nameController.text.trim().isEmpty) error = 'Please enter your name.';
+        if (_nameController.text.trim().isEmpty) {
+          error = 'Please enter your name.';
+        }
         break;
       case 1:
         final age = int.tryParse(_ageController.text.trim());
-        if (age == null || age <= 0) error = 'Please enter a valid age.';
+        if (age == null || age <= 0) {
+          error = 'Please enter a valid age.';
+        }
         break;
       case 2:
-        if (_genderController.text.trim().isEmpty) error = 'Please enter your gender.';
+        if (_genderController.text.trim().isEmpty) {
+          error = 'Please enter your gender.';
+        }
         break;
       case 3:
-        if (_vehicleNumController.text.trim().isEmpty) error = 'Please enter your vehicle number.';
+        if (_vehicleNumController.text.trim().isEmpty) {
+          error = 'Please enter your vehicle number.';
+        }
         break;
       case 4:
-        if (_vehicleType.isEmpty) error = 'Please select a vehicle type.';
+        if (_vehicleType.isEmpty) {
+          error = 'Please select a vehicle type.';
+        }
         break;
       case 5:
-        if (_emergNameController.text.trim().isEmpty) error = 'Please enter emergency contact name.';
+        if (_emergNameController.text.trim().isEmpty) {
+          error = 'Please enter emergency contact name.';
+        }
         break;
       case 6:
-        if (_emergPhoneController.text.trim().isEmpty) error = 'Please enter emergency contact number.';
+        if (_emergPhoneController.text.trim().isEmpty) {
+          error = 'Please enter emergency contact number.';
+        }
         break;
       case 7:
         final hours = int.tryParse(_hoursController.text.trim());
-        if (hours == null || hours <= 0) error = 'Please enter valid driving hours.';
+        if (hours == null || hours <= 0) {
+          error = 'Please enter valid driving hours.';
+        }
         break;
     }
 
     if (error.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          backgroundColor: AppColors.urgent,
-        ),
+        SnackBar(content: Text(error), backgroundColor: AppColors.urgent),
       );
       return false;
     }
@@ -155,7 +168,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Complete Setup'),
@@ -181,7 +194,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            color: isDark ? AppColors.darkSecondaryText : AppColors.lightSecondaryText,
+                            color: isDark
+                                ? AppColors.darkSecondaryText
+                                : AppColors.lightSecondaryText,
                           ),
                         ),
                         Text(
@@ -200,8 +215,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: (_currentStep + 1) / 8,
-                        backgroundColor: (isDark ? AppColors.darkBorder : AppColors.lightBorder).withValues(alpha: 0.5),
-                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.info),
+                        backgroundColor:
+                            (isDark
+                                    ? AppColors.darkBorder
+                                    : AppColors.lightBorder)
+                                .withValues(alpha: 0.5),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppColors.info,
+                        ),
                         minHeight: 6,
                       ),
                     ),
@@ -226,7 +247,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                           _buildStepPage(
                             title: 'How old are you?',
-                            subtitle: 'We use age for driving pattern safety models.',
+                            subtitle:
+                                'We use age for driving pattern safety models.',
                             input: GlassTextField(
                               controller: _ageController,
                               label: 'Age',
@@ -247,7 +269,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                           _buildStepPage(
                             title: 'What is your vehicle number?',
-                            subtitle: 'Enter your license plate registration number.',
+                            subtitle:
+                                'Enter your license plate registration number.',
                             input: GlassTextField(
                               controller: _vehicleNumController,
                               label: 'Vehicle Number',
@@ -279,7 +302,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                           _buildStepPage(
                             title: 'Who is your emergency contact?',
-                            subtitle: 'We will notify them in case of safety alerts.',
+                            subtitle:
+                                'We will notify them in case of safety alerts.',
                             input: GlassTextField(
                               controller: _emergNameController,
                               label: 'Emergency Contact Name',
@@ -289,7 +313,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                           _buildStepPage(
                             title: 'What is their contact number?',
-                            subtitle: 'Provide their active mobile phone number.',
+                            subtitle:
+                                'Provide their active mobile phone number.',
                             input: GlassTextField(
                               controller: _emergPhoneController,
                               label: 'Emergency Contact Number',
@@ -300,7 +325,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                           _buildStepPage(
                             title: 'How many hours do you drive daily?',
-                            subtitle: 'Estimate your average time behind the wheel.',
+                            subtitle:
+                                'Estimate your average time behind the wheel.',
                             input: GlassTextField(
                               controller: _hoursController,
                               label: 'Average Daily Driving Hours',
@@ -324,7 +350,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               icon: const Icon(Icons.arrow_back_rounded),
                               label: const Text('Previous'),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(22),
                                 ),
@@ -339,7 +367,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             label: _isSaving
                                 ? 'Saving...'
                                 : (_currentStep == 7 ? 'Finish Setup' : 'Next'),
-                            icon: _currentStep == 7 ? Icons.check_circle_outline : Icons.arrow_forward_rounded,
+                            icon: _currentStep == 7
+                                ? Icons.check_circle_outline
+                                : Icons.arrow_forward_rounded,
                             onPressed: _isSaving ? () {} : _nextStep,
                           ),
                         ),

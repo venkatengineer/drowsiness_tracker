@@ -101,6 +101,90 @@ class OpenMapsApi {
     );
   }
 
+  Future<List<PlaceResult>> fetchRoutePoints({
+    required double startLatitude,
+    required double startLongitude,
+    required double endLatitude,
+    required double endLongitude,
+  }) async {
+    final uri = Uri.parse(
+      'http://router.project-osrm.org/route/v1/driving/'
+      '$startLongitude,$startLatitude;$endLongitude,$endLatitude'
+      '?geometries=polyline',
+    );
+
+    late http.Response response;
+    try {
+      response = await _client.get(uri, headers: _headers);
+    } catch (_) {
+      throw const OpenMapsApiException('Unable to reach OSRM routing server.');
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw OpenMapsApiException(
+        'OSRM routing failed with status ${response.statusCode}.',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw const OpenMapsApiException('Invalid response from routing server.');
+    }
+
+    final routes = decoded['routes'];
+    if (routes is! List || routes.isEmpty) {
+      throw const OpenMapsApiException('No route found between coordinates.');
+    }
+
+    final route = routes.first as Map<String, dynamic>;
+    final geometry = route['geometry'] as String?;
+    if (geometry == null) {
+      throw const OpenMapsApiException('No geometry found in route.');
+    }
+
+    return _decodePolyline(geometry);
+  }
+
+  List<PlaceResult> _decodePolyline(String encoded) {
+    final List<PlaceResult> points = [];
+    int index = 0;
+    final int len = encoded.length;
+    int lat = 0;
+    int lng = 0;
+
+    while (index < len) {
+      int b;
+      int shift = 0;
+      int result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      final int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      final int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+      lng += dlng;
+
+      points.add(
+        PlaceResult(
+          name: 'Route coordinate',
+          latitude: lat / 1E5,
+          longitude: lng / 1E5,
+        ),
+      );
+    }
+    return points;
+  }
+
   void close() => _client.close();
 
   static const _headers = {
@@ -113,10 +197,7 @@ class OpenMapsApi {
     required PlaceResult? end,
     required String fallbackQuery,
   }) {
-    final params = <String, String>{
-      'size': '640x960',
-      'maptype': 'mapnik',
-    };
+    final params = <String, String>{'size': '640x960', 'maptype': 'mapnik'};
 
     if (start != null && end != null) {
       final centerLat = (start.latitude + end.latitude) / 2;

@@ -29,7 +29,10 @@ class AuthApi {
     required String username,
     required String password,
   }) async {
-    final responseBody = await _post('/auth/login', {'username': username, 'password': password});
+    final responseBody = await _post('/auth/login', {
+      'username': username,
+      'password': password,
+    });
     final decoded = jsonDecode(responseBody) as Map<String, dynamic>;
     final userJson = decoded['user'] as Map<String, dynamic>;
     currentSession = UserSession.fromJson(userJson);
@@ -149,4 +152,3 @@ class AuthApiException implements Exception {
   @override
   String toString() => message;
 }
-

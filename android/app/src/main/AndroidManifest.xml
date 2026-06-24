@@ -8,10 +8,15 @@
         android:required="false" />
 
     <application
-        android:label="driver_assist"
+        android:label="NG-DAS"
         android:name="${applicationName}"
         android:usesCleartextTraffic="true"
         android:icon="@mipmap/launcher_icon">
+        <!-- TODO: Add your Google Maps API Key here -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="YOUR_GOOGLE_MAPS_API_KEY_HERE" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
